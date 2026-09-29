@@ -133,6 +133,8 @@ The log below the chart shows a `JOURNAL` line for each trade.
 | Mouse wheel | More / fewer bars in view (20 to 600) |
 | Ctrl+mouse wheel, Ctrl+vertical drag | Compress / stretch price axis; view follows price |
 | R | Price axis back to auto |
+| Hover over a bar | Info box next to the pointer: bar number, date, time from–to (time zone of "Jump to"), open, high, low, close, volume, size in ticks, duration. Works for the running bar too and updates during playback |
+| H | Horizontal line at the mouse pointer with the price (snapped to the tick) on the right, on/off; also button "Crosshair (H)", default on. It ignores the mouse, so stop/target lines and drawings underneath can still be dragged |
 | T | Trend line: two left clicks place the line (preview follows the mouse), then drawing mode turns off; right click or Esc cancels. The line is extended to the right as a dashed line |
 | A | Text: click the position in the chart, enter the text (multi-line) in the dialog; then the mode is off again. Right click or Esc cancels |
 | Double click on text | Edit the text (emptying it deletes it) |

@@ -55,7 +55,11 @@ bewusste Architekturentscheidung – keine eigene Fill-Simulation bauen.
   Zeichenobjekte (`self.drawings`): `TrendLine` und `TextNote` (Taste A) teilen eine Schnittstelle
   (`hit`, `update`, `set_selected`, `coords`, `drag_to`, `clone`, `remove`); Auswahl, Ziehen, Shift+Ziehen,
   Strg+C, Entf laufen generisch. pyqtgraph meldet einen Doppelklick erst beim Loslassen (headless: nach
-  `QTest.mouseDClick` ein `mouseRelease` senden).
+  `QTest.mouseDClick` ein `mouseRelease` senden). Fadenkreuz-Linie (H) `cursor_line` nimmt keine Maustasten an.
+  Hover-Box `bar_box` (Szene, Pixel): `_bar_under` (Spalte ±0,45 Bar, High–Low ±3 px), aktualisiert in
+  `on_move` und am Ende von `refresh()` (laufende Bar ändert sich ohne Mausbewegung).
+  pyqtgraph verwirft Mausbewegungen < ~10 ms nach der vorigen (`_moveEventIsAllowed`): headless Drags
+  mit `QTest.qWait(20)` zwischen den `mouseMove`s, sonst kommt kein Drag an.
 - `fetch_databento.py` – Kosten abfragen, dann Trades + Definition laden.
 - `trade_journal.py` – Trade-Log `journal/trade_log.csv` (`--journal`), eine Zeile je Position flat→flat
   aus `PositionClosed`-Events. **NETTING verwendet die Position-ID wieder, `cache.positions_closed()` hält

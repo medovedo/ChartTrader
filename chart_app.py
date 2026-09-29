@@ -7,6 +7,8 @@ Controls
   Mouse wheel   more / fewer visible bars
   Ctrl+wheel    compress / stretch price axis (also Ctrl + vertical drag)
   R             Price axis back to auto
+  H             Horizontal line at the mouse pointer with price label on/off (default on)
+  Hover a bar   info box: time from-to, open/high/low/close, volume, size in ticks, duration
   T             Trend line: two left clicks = line (preview follows the mouse), then the
                 mode is off again; right click/Esc cancels. Click selects a line, dragging moves
                 it (at an endpoint: only the point), Shift+drag drags a copy, Ctrl+C copies
@@ -372,10 +374,30 @@ class ChartTrader(QtWidgets.QMainWindow):
         self.info = pg.TextItem(anchor=(1, 1), color="#ddd", fill=pg.mkBrush(30, 30, 30, 160))
         self.info.setFont(QtGui.QFont("Segoe UI", 11))
         self.info.setZValue(1000)
+        # Hover box for the bar under the mouse pointer (in the scene, position in pixels next to the pointer)
+        self.bar_box = pg.TextItem(anchor=(0, 0), color="#e0e0e0", fill=pg.mkBrush(20, 20, 20, 225),
+                                   border=pg.mkPen("#757575"))
+        self.bar_box.setFont(QtGui.QFont("Consolas", 10))
+        self.bar_box.setZValue(1001)
+        self.bar_box.setVisible(False)
+        self._hover_pos = None          # last mouse position in the chart (scene), None = outside
         self.plot.scene().addItem(self.info)     # directly in the scene, position in pixels (see _refresh_info)
+        self.plot.scene().addItem(self.bar_box)
         self.scatter = pg.ScatterPlotItem(size=12); self.plot.addItem(self.scatter)
         self.last_line = pg.InfiniteLine(angle=0, pen=pg.mkPen("#ffd54f", style=QtCore.Qt.DashLine))
         self.plot.addItem(self.last_line)
+        # Horizontal line at the mouse pointer (H), price snapped to the tick; ignores the mouse so that
+        # clicks and drags reach the orders/drawings underneath
+        self.cursor_line = pg.InfiniteLine(angle=0, pen=pg.mkPen("#9e9e9e", width=1, style=QtCore.Qt.DotLine),
+                                           label="{value:.2f}",
+                                           labelOpts={"position": 0.97, "color": "#e0e0e0",
+                                                      "fill": pg.mkBrush(30, 30, 30, 200)})
+        self.cursor_line.setAcceptedMouseButtons(QtCore.Qt.NoButton)
+        self.cursor_line.setAcceptHoverEvents(False)
+        self.cursor_line.setZValue(900)
+        self.cursor_line.setVisible(False)
+        self.plot.addItem(self.cursor_line, ignoreBounds=True)
+        self.cursor_on = True
         self.order_lines: list[pg.InfiniteLine] = []
         self.trap_lines: list[pg.InfiniteLine] = []
         self.day_lines: dict[int, pg.InfiniteLine] = {}    # bar index of day change -> vertical line
@@ -415,6 +437,9 @@ class ChartTrader(QtWidgets.QMainWindow):
         self.draw_btn.clicked.connect(self.toggle_draw); bar.addWidget(self.draw_btn)
         self.text_btn = QtWidgets.QPushButton("Text (A)"); self.text_btn.setCheckable(True)
         self.text_btn.clicked.connect(self.toggle_text); bar.addWidget(self.text_btn)
+        self.cursor_btn = QtWidgets.QPushButton("Crosshair (H)"); self.cursor_btn.setCheckable(True)
+        self.cursor_btn.setChecked(True)
+        self.cursor_btn.clicked.connect(self.toggle_cursor_line); bar.addWidget(self.cursor_btn)
         bar.addSpacing(20); bar.addWidget(QtWidgets.QLabel("Jump to"))
         self.jump_dt = QtWidgets.QDateTimeEdit(); self.jump_dt.setDisplayFormat("yyyy-MM-dd HH:mm")
         self.jump_dt.setCalendarPopup(True)
@@ -649,7 +674,76 @@ class ChartTrader(QtWidgets.QMainWindow):
         pt = self.plot.plotItem.vb.mapSceneToView(scene_pos)
         return float(round(pt.x())), round(round(pt.y() / self.inc) * self.inc, 10)
 
+    def toggle_cursor_line(self, on: bool | None = None):
+        self.cursor_on = (not self.cursor_on) if on is None else bool(on)
+        self.cursor_btn.setChecked(self.cursor_on)
+        # Show/hide at once at the current pointer position, not only on the next mouse move
+        self.on_move(self.plot.mapToScene(self.plot.mapFromGlobal(QtGui.QCursor.pos())))
+
+    def _bar_under(self, scene_pos, tol_px: float = 3.0) -> int | None:
+        """Index of the bar whose column (±0.45 bar) and high-low range (± tol_px) contain the pointer."""
+        vb = self.plot.plotItem.vb
+        pt = vb.mapSceneToView(scene_pos)
+        i = int(round(pt.x()))
+        bars = self.agg.bars
+        n = len(bars) + (1 if self.agg.current is not None else 0)
+        if not (0 <= i < n) or abs(pt.x() - i) > 0.45:
+            return None
+        b = bars[i] if i < len(bars) else self.agg.current
+        tol = abs(vb.mapSceneToView(scene_pos + QtCore.QPointF(0, tol_px)).y() - pt.y())
+        return i if b.low - tol <= pt.y() <= b.high + tol else None
+
+    def _bar_text(self, i: int) -> str:
+        agg = self.agg
+        running = i >= len(agg.bars)
+        b = agg.current if running else agg.bars[i]
+        zone = ZoneInfo(self.jump_tz.currentText())
+        t0 = datetime.fromtimestamp(b.ts_open / 1e9, tz=zone)
+        t1 = datetime.fromtimestamp(b.ts_close / 1e9, tz=zone)
+        secs = (b.ts_close - b.ts_open) / 1e9
+        s = int(secs)
+        if secs < 60:
+            dur = f"{secs:.1f} s".replace(".", ",")         # short bars (e.g. range bars at the open)
+        elif s < 3600:
+            dur = f"{s // 60}:{s % 60:02d} min"
+        else:
+            dur = f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d} h"
+        no = agg.number_of(i)
+        head = f"Bar {no}" + (" (running)" if running else "") if no else ("running bar" if running else "Bar")
+        return "\n".join([
+            f"{head}   {t0:%Y-%m-%d}",
+            f"Time     {t0:%H:%M:%S} – {t1:%H:%M:%S}",
+            f"Open     {b.open:.2f}",
+            f"High     {b.high:.2f}",
+            f"Low      {b.low:.2f}",
+            f"Close    {b.close:.2f}",
+            f"Volume   {b.volume:,.0f}".replace(",", "."),
+            f"Size     {round((b.high - b.low) / self.inc)} ticks",
+            f"Duration {dur}",
+        ])
+
+    def _update_bar_box(self):
+        """Show/refresh the hover box for the bar under the pointer (also during playback)."""
+        pos = self._hover_pos
+        i = self._bar_under(pos) if pos is not None else None
+        if i is None:
+            self.bar_box.setVisible(False); return
+        self.bar_box.setText(self._bar_text(i))
+        # Next to the pointer; flip to the other side at the right/bottom edge of the chart
+        r = self.plot.plotItem.vb.sceneBoundingRect()
+        br = self.bar_box.boundingRect()
+        x = pos.x() + 16 if pos.x() + 16 + br.width() <= r.right() else pos.x() - 16 - br.width()
+        y = pos.y() + 16 if pos.y() + 16 + br.height() <= r.bottom() else pos.y() - 16 - br.height()
+        self.bar_box.setPos(x, y)
+        self.bar_box.setVisible(True)
+
     def on_move(self, pos):
+        inside = self.plot.plotItem.vb.sceneBoundingRect().contains(pos)
+        self._hover_pos = pos if inside else None
+        self._update_bar_box()
+        if self.cursor_on and inside:
+            self.cursor_line.setPos(self._view_point(pos)[1])
+        self.cursor_line.setVisible(self.cursor_on and inside)
         if self.draw_mode and self.draw_start is not None and self.plot.sceneBoundingRect().contains(pos):
             x, y = self._view_point(pos)
             self.preview.setData([self.draw_start[0], x], [self.draw_start[1], y])
@@ -813,6 +907,10 @@ class ChartTrader(QtWidgets.QMainWindow):
         # and takes +/- for its zoom history, the QGraphicsView takes arrow keys for scrolling.
         if obj is self.plot and ev.type() == QtCore.QEvent.KeyPress and self._handle_key(ev):
             return True
+        if obj is self.plot and ev.type() == QtCore.QEvent.Leave:
+            self.cursor_line.setVisible(False)      # mouse left the chart
+            self._hover_pos = None
+            self.bar_box.setVisible(False)
         return super().eventFilter(obj, ev)
 
     def keyPressEvent(self, e):
@@ -835,6 +933,7 @@ class ChartTrader(QtWidgets.QMainWindow):
         elif k == QtCore.Qt.Key_R: self.reset_y()
         elif k == QtCore.Qt.Key_T: self.toggle_draw()
         elif k == QtCore.Qt.Key_A and not ctrl: self.toggle_text()
+        elif k == QtCore.Qt.Key_H: self.toggle_cursor_line()
         elif k == QtCore.Qt.Key_Escape and (self.draw_mode or self.text_mode):
             self.toggle_draw(False); self.toggle_text(False)
         elif k == QtCore.Qt.Key_Delete: self.remove_drawings(all_items=shift)
@@ -1027,6 +1126,7 @@ class ChartTrader(QtWidgets.QMainWindow):
             f"{ts} UTC   Last {st.last_price:.2f}   Pos {st.net_qty:+g}   "
             f"Unreal {st.unrealized:+.2f}   Real {st.realized:+.2f}   "
             f"Speed {self.speed:g}x   Tick {self.engine.i}/{len(self.engine.ticks)}")
+        self._update_bar_box()          # after the view update: bars move under a still pointer during playback
 
     def closeEvent(self, e):
         self.timer.stop()
