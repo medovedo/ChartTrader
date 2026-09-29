@@ -16,6 +16,7 @@ SimulatedExchange (streaming backtest), not from custom logic.
 | `export_nt8.py` | Databento ticks → NinjaTrader 8 import file |
 | `export_bars.py` | Bars → CSV files like NT's TickBarsExporter indicator |
 | `trade_journal.py` | Trade log: one CSV row per closed trade |
+| `docs/log_guide.md` | How to read the log messages and the trade log (German, context for trade analysis) |
 | `chart_app.py` | PySide6/pyqtgraph UI |
 
 ## Installation

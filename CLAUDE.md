@@ -147,6 +147,8 @@ Quelle: Vergleich Databento MBO (ESU6, Session 13.8.2026) gegen NTs eigenen Tick
 4. Performance: Millionen Ticks → Ladezeit/RAM; Tages- oder Sessionweise laden.
 
 ## Konventionen
+- `docs/log_guide.md` (Deutsch, Kontext für den ES-Trading-Chat) beschreibt jede Log-Meldung und das
+  Trade-Log. Bei neuen oder geänderten Meldungstexten mitpflegen.
 - Keine Browser-Storage-APIs, keine externen Chart-Libs; pyqtgraph bleibt.
 - Vor Änderungen an der Engine den Headless-Smoke-Test laufen lassen (siehe README).
 - `pip install --break-system-packages` nur im Container; lokal venv.
