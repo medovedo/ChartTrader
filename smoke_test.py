@@ -149,6 +149,20 @@ def main() -> int:
           f"Journal row consistent: {r['Side']} {r['Qty']} {r['Entry']} -> {r['Exit']} = {r['PnL']}")
     print("Journal:", *lines, sep="\n  ")
 
+    # --- 9. place_exits: OCO stop/target for an existing position (replacement after a partial fill) ---
+    strat.market(OrderSide.BUY, 1)
+    engine.step(25)
+    sl_id, tp_id = strat.place_exits(True, 1, reachable_price(engine, above=False), reachable_price(engine, above=True))
+    engine.step(1)
+    s = engine.state()
+    check(s.net_qty == 1 and sorted(o[0] for o in s.open_orders) == ["LIMIT", "STOP_MARKET"],
+          f"place_exits: stop + target working, net={s.net_qty}")
+    hit = step_until(engine, lambda st: st.net_qty == 0, max_ticks=8000)
+    c = engine.engine.cache
+    statuses = sorted((c.order(sl_id).status.name, c.order(tp_id).status.name))
+    check(hit and not engine.state().open_orders and statuses in (["CANCELED", "FILLED"], ["FILLED", "CANCELED"]),
+          f"place_exits: one side filled, OCO cancelled the other: {statuses}")
+
     engine.end()
     tmp.cleanup()
     print()

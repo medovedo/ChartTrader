@@ -249,12 +249,14 @@ class OrderView:
     trigger_price: float # stop trigger (0 if none)
     is_open: bool
     is_closed: bool
+    quantity: float = 0.0  # order quantity (leaves_qty can be stale after the exchange changes the quantity)
 
 
 class Broker(Protocol):
     """Implemented by ManualStrategy; every order is addressed by its ID."""
     def place_bracket(self, is_long: bool, qty: int, limit_price: float, stop_price: float,
                       target_price: float, trigger_price: float | None = None) -> tuple[Any, Any, Any]: ...
+    def place_exits(self, is_long: bool, qty: int, stop_price: float, target_price: float) -> tuple[Any, Any]: ...
     def order_view(self, oid: Any) -> OrderView: ...
     def modify(self, oid: Any, price: float | None = None, trigger_price: float | None = None,
                quantity: int | None = None) -> None: ...
@@ -290,6 +292,8 @@ class AtmTrade:
     entry_price: float = 0.0
     entry_complete: bool = False
     entry_cancel_requested: bool = False
+    post_fill_extreme: float = 0.0     # best last price since the fill (partial fill cancel, as in the original)
+    unprotected_warned: bool = False
     position_seen: bool = False
     stop1_adjusted: bool = False
     runner_stop_adjusted: bool = False
@@ -575,18 +579,34 @@ class Sniper:
         if not t.entry_complete and all(v.is_closed for v in views):
             t.entry_complete = True
 
-        # Partial fill: cancel the remainder when price has run away (reduce quantity to the filled amount
-        # so stop/target of the filled contracts are kept)
+        # Stop/target follow the filled quantity of their entry (like an NT ATM). The exchange creates the
+        # OTO children with the full entry quantity, which would overshoot while the entry is partially filled.
+        for br, v in zip(t.brackets, views):
+            if v.filled_qty > 0:
+                for oid in (br.sl, br.tp):
+                    ov = self.b.order_view(oid)
+                    if ov.is_open and ov.filled_qty == 0 and ov.quantity != v.filled_qty:
+                        self.b.modify(oid, quantity=int(v.filled_qty))
+
+        # Partial fill: cancel the remainder when price has run away. Cancelling (or reducing) a partially
+        # filled entry makes the exchange cancel its OTO stop/target as well, so the filled contracts get
+        # a new OCO pair right away.
         if not t.entry_complete and not t.entry_cancel_requested:
-            run = (b0.high - t.entry_price) / tick if t.is_long else (t.entry_price - b0.low) / tick
+            # Only the way since the fill counts (PostFillExtreme on the last price): the bar's high/low
+            # may lie before a pullback fill and would cancel the rest at once
+            last = b0.close
+            if t.post_fill_extreme == 0:
+                t.post_fill_extreme = t.entry_price
+            t.post_fill_extreme = max(t.post_fill_extreme, last) if t.is_long else min(t.post_fill_extreme, last)
+            run = (t.post_fill_extreme - t.entry_price) / tick * t.sign
             if run >= self.cfg.partial_fill_cancel_ticks:
                 t.entry_cancel_requested = True
                 for br, v in zip(t.brackets, views):
-                    if v.is_open:
-                        if v.filled_qty > 0:
-                            self.b.modify(br.entry, quantity=int(v.filled_qty))
-                        else:
-                            self.b.cancel(br.entry)
+                    if not v.is_open:
+                        continue
+                    self.b.cancel(br.entry)
+                    if v.filled_qty > 0:
+                        self._replace_exits(t, br, v)
                 self._log(f"PARTIAL FILL: rest of entry cancelled ({self.cfg.partial_fill_cancel_ticks} ticks run)")
 
         # Align targets to the actual entry price (fill may differ from the limit, e.g. Momentum)
@@ -642,7 +662,34 @@ class Sniper:
         if t.entry_complete and open_qty <= 0:
             self._log(f"{t.label} closed.")
             return True
+        # Safety net: filled contracts without any working stop must never go unnoticed
+        if t.entry_complete and open_qty > 0 and not t.unprotected_warned:
+            protected = sum(self.b.order_view(br.sl).quantity for br in t.brackets if self.b.order_view(br.sl).is_open)
+            if protected < open_qty:
+                t.unprotected_warned = True
+                self._log(f"WARNING {t.label}: {open_qty:g} contract(s) open, only {protected:g} covered by a stop!")
         return False
+
+    def _replace_exits(self, t: AtmTrade, br: TrackedBracket, entry: OrderView) -> None:
+        """New OCO stop/target for the filled part of a cancelled entry. Keeps prices that were already set
+        (structural stop, manual moves, aligned target), otherwise the intended stop / target from the fill."""
+        tick = self.tick
+        old_sl, old_tp = self.b.order_view(br.sl), self.b.order_view(br.tp)
+        adjusted = t.runner_stop_adjusted if br.is_runner else t.stop1_adjusted
+        stop = old_sl.trigger_price if adjusted or t.intended_stop <= 0 else t.intended_stop
+        target = old_tp.price if br.targets_aligned else \
+            self._r(entry.avg_px + t.sign * self._target_ticks(t, br) * tick)
+        for oid in (br.sl, br.tp):
+            self.b.cancel(oid)                        # the exchange cancels them with the entry anyway
+        br.sl, br.tp = self.b.place_exits(t.is_long, int(entry.filled_qty), stop, target)
+        br.targets_aligned = True
+        if br.is_runner:
+            t.runner_stop_adjusted = True
+            t.current_runner_stop = stop
+        else:
+            t.stop1_adjusted = True
+        self._log(f"{'Runner' if br.is_runner else 'Bracket'} {int(entry.filled_qty)} contract(s): new stop {stop}, "
+                  f"target {target}")
 
     def _target_ticks(self, t: AtmTrade, br: TrackedBracket) -> int:
         return t.template.brackets[t.brackets.index(br)].target_ticks

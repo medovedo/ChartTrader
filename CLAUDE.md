@@ -83,7 +83,15 @@ DBN-Dateien (Ein- und Mehrtages, Kontraktauswahl) verifiziert; `fetch_databento.
 Sniper (`test_sniper.py`, Tick-Bars mit konstruierten Pfaden): Smart Long Fill → Stop1/Stop2 auf
 Struktur-Stop → Target1 (WADES-Vorlagen haben kein ATM-BE mehr) → Auto-BE → Swing-Trail → Runner-Exit (PnL 375); Short-Verlust →
 Sperre; Runway- und Bars-to-Wait-Storno; Scratch; Cancel All; No-Runner; Momentum-Stop-Limit.
-Teilfill-Storno ist ungetestet (Nautilus füllt je Trade-Volumen, Teilfills sind schwer zu konstruieren).
+Teilfill (Fehler vom 29.9.2026 behoben, Test mit `FakeBroker` in `test_sniper.py` 2c): **SimulatedExchange storniert
+beim Storno (oder Mengen-Reduktion) einer teilgefüllten Entry auch deren OTO-Stop/Target** → gefüllte Kontrakte
+standen ungeschützt da. Jetzt: Entry stornieren + `place_exits` (neues OUO-Paar, reduce-only) für die gefüllte
+Menge. Stop/Target folgen der gefüllten Menge (`quantity`, nicht `leaves_qty` – das bleibt nach Mengenänderung
+durch die Exchange veraltet). Rest-Storno misst wie das Original nur den Weg seit dem Fill (`post_fill_extreme`
+auf dem letzten Kurs), nicht Bar-High/Low. Warnung im Log, wenn offene Kontrakte ohne Stop sind.
+Teilfills bleiben in der SimulatedExchange selten stehen: ändert man im Fill-Tick eine Order, gleicht sie den
+Rest gegen das aus Trades abgeleitete L1-Buch ab und füllt ihn. Im Stop-Tick kann ein harmloses
+`MODIFY REJECTED … in the market` für Stop1 aus der Contingency-Behandlung der Exchange erscheinen (Ursache offen).
 Nautilus-Fill-Regel (empirisch): Limit füllt zum Limitpreis, sobald ein Trade dort handelt, mit dem
 Trade-Volumen; Bid/Ask kommen aus den Aggressor-Seiten – synthetische Ticks brauchen daher
 Aggressor = Preisrichtung, sonst füllen Limits zu falschen Preisen.

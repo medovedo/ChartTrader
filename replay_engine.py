@@ -15,10 +15,13 @@ from nautilus_trader.backtest.engine import BacktestEngine, BacktestEngineConfig
 from nautilus_trader.config import LoggingConfig
 from nautilus_trader.model.currencies import USD
 from nautilus_trader.model.data import TradeTick
-from nautilus_trader.model.enums import AccountType, OmsType, OrderSide, OrderType, TimeInForce
+from nautilus_trader.core.uuid import UUID4
+from nautilus_trader.model.enums import (AccountType, ContingencyType, OmsType, OrderSide, OrderType, TimeInForce,
+                                         TriggerType)
 from nautilus_trader.model.identifiers import ClientOrderId, InstrumentId, TraderId, Venue
 from nautilus_trader.model.instruments import Instrument
 from nautilus_trader.model.objects import Money, Price, Quantity
+from nautilus_trader.model.orders import LimitOrder, OrderList, StopMarketOrder
 from nautilus_trader.trading.strategy import Strategy, StrategyConfig
 
 from range_bars import RangeBarAggregator
@@ -171,6 +174,23 @@ class ManualStrategy(Strategy):
         tp = next(o for o in orders.orders if o.parent_order_id is not None and o.order_type == OrderType.LIMIT)
         return entry.client_order_id, sl.client_order_id, tp.client_order_id
 
+    def place_exits(self, is_long: bool, qty: int, stop_price: float, target_price: float):
+        """Stop-market + target limit as an OCO pair (OUO, reduce-only) for an existing position,
+        e.g. after the partially filled entry of a bracket was cancelled (which cancels its OTO children)."""
+        f, mp = self.order_factory, self.instrument.make_price
+        sl_id, tp_id = f.generate_client_order_id(), f.generate_client_order_id()
+        list_id = f.generate_order_list_id()
+        side = OrderSide.SELL if is_long else OrderSide.BUY
+        common = dict(trader_id=self.trader_id, strategy_id=self.id, instrument_id=self.instrument.id,
+                      order_side=side, quantity=Quantity.from_int(qty), time_in_force=TimeInForce.GTC,
+                      reduce_only=True, contingency_type=ContingencyType.OUO, order_list_id=list_id)
+        sl = StopMarketOrder(client_order_id=sl_id, trigger_price=mp(stop_price), trigger_type=TriggerType.DEFAULT,
+                             linked_order_ids=[tp_id], init_id=UUID4(), ts_init=self.clock.timestamp_ns(), **common)
+        tp = LimitOrder(client_order_id=tp_id, price=mp(target_price), post_only=False,
+                        linked_order_ids=[sl_id], init_id=UUID4(), ts_init=self.clock.timestamp_ns(), **common)
+        self.submit_order_list(OrderList(order_list_id=list_id, orders=[sl, tp]))
+        return sl_id, tp_id
+
     def order_view(self, oid: ClientOrderId) -> OrderView:
         o = self.cache.order(oid)
         price = getattr(o, "price", None)
@@ -184,6 +204,7 @@ class ManualStrategy(Strategy):
             trigger_price=float(trig) if trig is not None else 0.0,
             is_open=o.is_open,
             is_closed=o.is_closed,
+            quantity=float(o.quantity),
         )
 
     def modify(self, oid: ClientOrderId, price: float | None = None, trigger_price: float | None = None,

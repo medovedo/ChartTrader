@@ -19,7 +19,7 @@ from atm_templates import AtmBracket, AtmTemplate, load_atm_template, max_risk_f
 from data_loader import es_contract
 from range_bars import RangeBar, TickBarAggregator
 from replay_engine import ReplayEngine
-from sniper import SniperConfig, SetupRejected, deep_setup, momentum_setup, signal_bar_check, smart_setup
+from sniper import Sniper, SniperConfig, SetupRejected, deep_setup, momentum_setup, signal_bar_check, smart_setup
 
 FAILS: list[str] = []
 T0 = 1_765_800_000_000_000_000   # 2025-12-15 ~13:20 UTC, one trading day
@@ -67,6 +67,59 @@ BAR_I = [103.00, 102.75, 102.50, 102.25, 102.00, 101.75, 101.50, 101.25, 101.00,
 BAR_J = [101.25, 101.00, 100.75, 100.75, 100.75, 100.75, 100.50, 100.25, 100.50, 100.75]   # trigger, 3 fills @100.75
 BAR_K = [101.50, 101.75, 102.00, 102.25, 102.50, 102.75, 103.00, 103.25, 103.50, 103.50]   # stop 103.50 -> loss
 FLAT = [103.50] * 10
+
+
+class FakeBroker:
+    """Broker for exact partial fills (the SimulatedExchange re-matches the rest of an entry against the
+    trade-derived book as soon as an order is changed in the fill tick, so partial fills do not persist).
+    Like the exchange, cancelling an entry also cancels its stop/target."""
+    def __init__(self):
+        self.orders, self.children, self.n, self.logs = {}, {}, 0, []
+
+    def _new(self, **kw):
+        self.n += 1
+        oid = f"O{self.n}"
+        self.orders[oid] = {"status": "ACCEPTED", "filled": 0.0, "avg": 0.0, "price": 0.0, "trigger": 0.0, **kw}
+        return oid
+
+    def place_bracket(self, is_long, qty, limit_price, stop_price, target_price, trigger_price=None):
+        e = self._new(qty=qty, price=limit_price)
+        s = self._new(qty=qty, trigger=stop_price)
+        t = self._new(qty=qty, price=target_price)
+        self.children[e] = (s, t)
+        return e, s, t
+
+    def place_exits(self, is_long, qty, stop_price, target_price):
+        return self._new(qty=qty, trigger=stop_price), self._new(qty=qty, price=target_price)
+
+    def order_view(self, oid):
+        from sniper import OrderView
+        o = self.orders[oid]
+        is_open = o["status"] in ("ACCEPTED", "PARTIALLY_FILLED")
+        return OrderView(o["status"], o["filled"], o["qty"] - o["filled"], o["avg"], o["price"], o["trigger"],
+                         is_open, not is_open, float(o["qty"]))
+
+    def modify(self, oid, price=None, trigger_price=None, quantity=None):
+        o = self.orders[oid]
+        o.update({k: v for k, v in (("price", price), ("trigger", trigger_price), ("qty", quantity)) if v is not None})
+
+    def cancel(self, oid):
+        if self.orders[oid]["status"] in ("ACCEPTED", "PARTIALLY_FILLED"):
+            self.orders[oid]["status"] = "CANCELED"
+            for child in self.children.get(oid, ()):
+                self.cancel(child)
+
+    def fill(self, oid, qty, px):
+        o = self.orders[oid]
+        o["avg"] = (o["avg"] * o["filled"] + px * qty) / (o["filled"] + qty)
+        o["filled"] += qty
+        o["status"] = "FILLED" if o["filled"] >= o["qty"] else "PARTIALLY_FILLED"
+
+    def close_all(self):
+        pass
+
+    def log(self, msg):
+        self.logs.append(msg)
 
 
 class Harness:
@@ -194,6 +247,38 @@ def main() -> int:
           f"Rejected manual move does not reach the Sniper: stop2 {t.current_runner_stop}")
     h.run_to(81)
     check(h.views(t)[1][1].trigger_price == 103.75, f"Trail without auto-BE: Stop2 at 103.75: {h.views(t)[1][1].trigger_price}")
+
+    # ---------- 2c. Partial fill: exits follow the fill, rest cancelled after 10 ticks since the fill,
+    #             filled contracts get a new OCO stop/target (the exchange cancels the old ones with the entry)
+    fb = FakeBroker()
+    sn = Sniper(fb, tick, SniperConfig())
+    sn.cur = 5
+    t = sn._place(True, load_atm_template("WADES12"), 100.50, 97.75, 102.25, None, "Smart Long")
+    b1, b2 = t.brackets
+    old_sl, old_tp = b1.sl, b1.tp
+
+    def tick_at(px, high=None):
+        sn.on_tick(RangeBar(px, max(px, high or px), px, px, 1, T0, T0), [bar(1, 1, 1, 1)] * 5, T0)
+
+    fb.fill(b1.entry, 1, 100.50)
+    tick_at(100.50, high=104.00)                    # bar high before the (pullback) fill must not count
+    check(fb.orders[b1.sl]["qty"] == 1 and fb.orders[b1.tp]["qty"] == 1 and fb.orders[b1.sl]["trigger"] == 97.75,
+          f"Partial fill: Stop1/Target1 follow the filled quantity: {fb.orders[b1.sl]}, {fb.orders[b1.tp]}")
+    check(not t.entry_cancel_requested, "Bar extreme before the fill does not cancel the rest")
+    for k in range(1, 10):
+        tick_at(100.50 + k * tick)                  # +9 ticks since the fill
+    check(not t.entry_cancel_requested, "9 ticks since the fill: rest still working")
+    tick_at(103.00)                                 # +10 ticks
+    check(t.entry_cancel_requested and fb.orders[b1.entry]["status"] == "CANCELED"
+          and fb.orders[b2.entry]["status"] == "CANCELED", "10 ticks since the fill: rest of both entries cancelled")
+    new_sl, new_tp = fb.orders[b1.sl], fb.orders[b1.tp]
+    check(b1.sl != old_sl and new_sl["status"] == "ACCEPTED" and new_sl["qty"] == 1 and new_sl["trigger"] == 97.75
+          and new_tp["qty"] == 1 and new_tp["price"] == 103.50,
+          f"New OCO exits for the filled contract: stop {new_sl}, target {new_tp}")
+    check(fb.orders[old_sl]["status"] == "CANCELED", "Old stop cancelled together with the entry")
+    fb.fill(b1.tp, 1, 103.50)
+    tick_at(103.50)
+    check(not sn.trades and any("closed" in m for m in fb.logs), "Target of the replaced exits closes the trade")
 
     # ---------- 3. Smart Short: loss -> daily lockout ----------
     h = Harness(BAR_I0 + BAR_I + BAR_J + BAR_K + FLAT + FLAT)
