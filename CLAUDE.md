@@ -81,8 +81,8 @@ zur Bestätigung. `Sniper.on_manual_move` übernimmt manuelle Stops (Trail/BE zi
 Uhr, Pause/N/Sprung synchronisieren, 60-s-Lücke wird zu ~3 s. Databento-Laden aus lokalen
 DBN-Dateien (Ein- und Mehrtages, Kontraktauswahl) verifiziert; `fetch_databento.py` (API) ungetestet.
 Sniper (`test_sniper.py`, Tick-Bars mit konstruierten Pfaden): Smart Long Fill → Stop1/Stop2 auf
-Struktur-Stop → Target1 (WADES-Vorlagen haben kein ATM-BE mehr) → Auto-BE → Swing-Trail → Runner-Exit (PnL 375); Short-Verlust →
-Sperre; Runway- und Bars-to-Wait-Storno; Scratch; Cancel All; No-Runner; Momentum-Stop-Limit.
+Struktur-Stop → Target1 (WADES-Vorlagen haben kein ATM-BE mehr) → Auto-BE → Swing-Trail → Runner-Exit (PnL 375); Short-Verlust
+(keine Tagessperre: im Replay auf Wunsch des Nutzers entfernt, anders als in der NT-Strategie); Runway- und Bars-to-Wait-Storno; Scratch; Cancel All; No-Runner; Momentum-Stop-Limit.
 Teilfill (Fehler vom 29.9.2026 behoben, Test mit `FakeBroker` in `test_sniper.py` 2c): **SimulatedExchange storniert
 beim Storno (oder Mengen-Reduktion) einer teilgefüllten Entry auch deren OTO-Stop/Target** → gefüllte Kontrakte
 standen ungeschützt da. Jetzt: Entry stornieren + `place_exits` (neues OUO-Paar, reduce-only) für die gefüllte

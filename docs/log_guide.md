@@ -5,7 +5,9 @@ Tick-Replay für ES-Futures (Databento-Daten, meist MBO = ein Tick je Fill wie i
 Ich handle im Replay manuell oder mit dem "Sniper" (Port meiner NT-Strategie LotsenhofSniper,
 ATM-Vorlagen WADES6..16, Max Risk = Zahl im Namen − 1 Ticks). Fills, OCO, Positionen und PnL
 kommen aus der NautilusTrader-SimulatedExchange. ES: 1 Tick = 0,25 Punkte = 12,50 $, 1 Punkt = 50 $.
-Chart meist 2000-Tick-Bars (tick:2000), EMA 21. Regel: nach einem Verlust-Trade ist der Tag beendet.
+Chart meist 2000-Tick-Bars (tick:2000), EMA 21. Meine Regel: nach einem Verlust-Trade ist der Tag beendet.
+Der ChartTrader erzwingt das **nicht** (keine Tagessperre im Replay) – Trades nach einem Verlust sind
+also möglich und sollten in der Auswertung als Regelverstoß bzw. Übungs-Trades markiert werden.
 
 ## Wichtig beim Lesen des Logs
 - Die Log-Zeilen unter dem Chart haben **keine Uhrzeit**; es zählt die Reihenfolge.
@@ -46,7 +48,6 @@ Chart meist 2000-Tick-Bars (tick:2000), EMA 21. Regel: nach einem Verlust-Trade 
 - `TRAIL: Stop2 moved to P` – Runner-Stop hinter bestätigten Swing (2 Bars je Seite, ≥ 8 Ticks, +1 Tick).
 - `SCRATCH: …` – Targets auf Einstand + Offset gezogen. `Killswitch activated …` – Cancel All.
 - `… closed.` – Trade beendet.
-- `Loss registered: -X (n/1).` + `TRADING LOCKED for <Tag> …` – Verlust-Trade, Tagessperre aktiv.
 - `WARNING …: N contract(s) open, only M covered by a stop!` – **kritisch**: ungeschützte Kontrakte.
 - `ERROR: …` / `Signal bar rejected: close 50.0% < 70% | …` / `Inside Bar blocked` /
   `Double bar structure too large` – Setup abgelehnt, keine Order.

@@ -4,7 +4,8 @@ Structure as in the original (LotsenhofSniper.cs):
 - Pure calculation logic without broker dependency: signal bar filter, inside bar,
   Smart/Deep/Momentum setup, swing trail. All testable against bar objects with
   open/high/low/close.
-- `Sniper` is the state machine (Trap, tracked ATM trades, daily lockout).
+- `Sniper` is the state machine (Trap, tracked ATM trades). The original's daily loss lockout
+  is deliberately not ported: in the replay trading continues after a losing trade.
   It runs per tick in `ManualStrategy.on_trade_tick`, i.e. inside the Nautilus stream,
   and drives the orders through a few broker methods of the strategy.
 
@@ -58,9 +59,6 @@ class SniperConfig:
     min_swing_size_ticks: int = 8
     trail_buffer_ticks: int = 1
     scratch_offset_ticks: int = 2
-    enable_daily_loss_lockout: bool = True
-    losses_until_lockout: int = 1
-    min_loss_to_count: float = 0.0
     show_only_smart_buttons: bool = True
 
 
@@ -333,9 +331,6 @@ class Sniper:
         self.max_risk = max_risk_from_name(self.atm_name, self.cfg.default_max_risk_ticks)
         self.trap: Trap | None = None
         self.trades: list[AtmTrade] = []
-        self.locked = False
-        self.losses_today = 0
-        self.day = None
         self.notice = ""            # last rejection/error message for display
         self.bar0: Any = None
         self.bars: list[Any] = []
@@ -370,12 +365,6 @@ class Sniper:
         self._log(msg.replace("\n", " "))
 
     # --- preconditions --------------------------------------------------------
-    def _blocked(self) -> bool:
-        if self.cfg.enable_daily_loss_lockout and self.locked:
-            self._fail("BLOCKED: daily loss lockout active.\nNo new entries until the next trading day.")
-            return True
-        return False
-
     def _signal_bars(self):
         if len(self.bars) < 2:
             self._fail("ERROR: not enough bars yet")
@@ -384,8 +373,6 @@ class Sniper:
 
     # --- actions from GUI/hotkeys ------------------------------------------------
     def arm_smart(self, is_long: bool, no_runner: bool = False) -> bool:
-        if self._blocked():
-            return False
         if no_runner and not self.cfg.no_runner_suffix:
             self._fail("ERROR: No-Runner Template Suffix is empty!")
             return False
@@ -404,8 +391,6 @@ class Sniper:
         return self._arm(setup, tpl, label)
 
     def arm_deep(self, is_long: bool) -> bool:
-        if self._blocked():
-            return False
         sb = self._signal_bars()
         if sb is None:
             return False
@@ -428,8 +413,6 @@ class Sniper:
 
     def momentum(self, is_long: bool) -> bool:
         """Immediate entry: limit if the market is already beyond the entry, otherwise stop-limit."""
-        if self._blocked():
-            return False
         sb = self._signal_bars()
         if sb is None or self.bar0 is None:
             return False
@@ -518,19 +501,12 @@ class Sniper:
         new_bar = cur != self._last_cur
         self._last_cur = cur
 
-        if self.cfg.enable_daily_loss_lockout:
-            day = trading_day(ts_ns)
-            if day != self.day:
-                if self.day is not None and (self.locked or self.losses_today):
-                    self._log(f"New trading day {day}: loss lockout reset.")
-                self.day, self.losses_today, self.locked = day, 0, False
-
         # Trap: expires with the next bar, fires when the trigger is touched
         tr = self.trap
         if tr and cur > tr.bar:
             self.trap = None
             self._log(f"{tr.label} trap expired (bar closed without trigger).")
-        elif tr and not self.locked:
+        elif tr:
             hit = bar0.high >= tr.trigger if tr.is_long else bar0.low <= tr.trigger
             if hit:
                 self.trap = None
@@ -726,19 +702,3 @@ class Sniper:
 
     def _r(self, p: float) -> float:
         return round(round(p / self.tick) * self.tick, 10)
-
-    # --- loss lockout --------------------------------------------------------------
-    def on_position_closed(self, realized_pnl: float) -> None:
-        """OnAccountAddTrade/RegisterLoss: count losses, lock the day once the threshold is reached."""
-        if not self.cfg.enable_daily_loss_lockout or realized_pnl >= 0:
-            return
-        if self.cfg.min_loss_to_count > 0 and -realized_pnl < self.cfg.min_loss_to_count:
-            return
-        if self.locked:
-            return
-        self.losses_today += 1
-        self._log(f"Loss registered: {realized_pnl:.2f} ({self.losses_today}/{self.cfg.losses_until_lockout}).")
-        if self.losses_today >= self.cfg.losses_until_lockout:
-            self.locked = True
-            self.trap = None
-            self._fail(f"TRADING LOCKED for {self.day} after {self.losses_today} loss(es). Scratch and Cancel stay active.")

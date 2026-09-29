@@ -1,7 +1,7 @@
 """Headless test of the LotsenhofSniper port against the SimulatedExchange (without Qt).
 
 Tick bars with 10 trades per bar and hand-picked price paths, so that signal bar,
-trigger, fills, stop adjustment, breakeven, swing trail, lockout and cancellation
+trigger, fills, stop adjustment, breakeven, swing trail, partial fill and cancellation
 can be checked deterministically. Usage: python test_sniper.py
 """
 from __future__ import annotations
@@ -227,7 +227,6 @@ def main() -> int:
     st = h.eng.state()
     check(h.net() == 0 and not h.sn.trades and not st.open_orders, f"Runner stopped out, trade finished, open={st.open_orders}")
     check(abs(st.realized - 375.0) < 1e-6, f"Realized PnL {st.realized:.2f} (expected 375.00)")
-    check(not h.sn.locked, "Winning trade: no lockout")
     rows = h.strat.journal.rows
     check(len(rows) == 1 and rows[0]["Setup"] == "Smart Long WADES12" and rows[0]["Qty"] == "3"
           and rows[0]["Entry"] == "102,25" and rows[0]["PnL"] == "375",
@@ -280,7 +279,7 @@ def main() -> int:
     tick_at(103.50)
     check(not sn.trades and any("closed" in m for m in fb.logs), "Target of the replaced exits closes the trade")
 
-    # ---------- 3. Smart Short: loss -> daily lockout ----------
+    # ---------- 3. Smart Short: loss, trading continues (no daily lockout in the replay) ----------
     h = Harness(BAR_I0 + BAR_I + BAR_J + BAR_K + FLAT + FLAT)
     h.run_to(22)
     check(h.sn.arm_smart(False), "Smart Short armed")
@@ -294,9 +293,10 @@ def main() -> int:
     h.run_to(45)
     st = h.eng.state()
     check(h.net() == 0 and st.realized < 0, f"Stopped out, realized {st.realized:.2f}")
-    check(h.sn.locked, "After loss: TRADING LOCKED")
     h.run_to(52)
-    check(not h.sn.arm_smart(True) and "BLOCKED" in h.sn.notice, "New entry rejected during lockout")
+    h.sn.arm_smart(True)                            # flat bars: may be rejected by the signal bar filter, never locked
+    check(not any("LOCKED" in e or "BLOCKED" in e for e in h.events()) and "BLOCKED" not in h.sn.notice,
+          f"No trading lock after a losing trade (replay): notice {h.sn.notice!r}")
 
     # ---------- 4. Runway: pullback limit, price runs away -> cancel ----------
     BAR_A_LOW = [98.00, 98.25, 98.50, 99.00, 99.50, 100.00, 100.50, 100.75, 101.00, 100.75]

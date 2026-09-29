@@ -81,8 +81,6 @@ class ManualStrategy(Strategy):
 
     def on_position_closed(self, event):
         self.realized_closed += float(event.realized_pnl)
-        if self.sniper is not None:
-            self.sniper.on_position_closed(float(event.realized_pnl))
         if self.journal is not None:
             r = self.journal.record(event, self._position_setup)
             self.events.append(f"JOURNAL {r['Side']} {r['Qty']} {r['Entry']} -> {r['Exit']}  "

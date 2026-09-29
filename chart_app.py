@@ -503,11 +503,7 @@ class ChartTrader(QtWidgets.QMainWindow):
             grid.addWidget(b, rr, cc)
         grid.addWidget(btn(f"SCRATCH TP (+{sn.cfg.scratch_offset_ticks})  C", "#ffd700", sn.scratch, fg="black"), r, 0, 1, 2)
         grid.addWidget(btn("CANCEL ALL  X", "#ff8c00", sn.cancel_all), r + 1, 0, 1, 2)
-        self.lockout_lbl = QtWidgets.QLabel(); self.lockout_lbl.setAlignment(QtCore.Qt.AlignCenter)
-        self.lockout_lbl.setStyleSheet("background: #8b0000; color: white; font-weight: bold; padding: 4px")
-        self.lockout_lbl.setWordWrap(True); self.lockout_lbl.hide()
-        grid.addWidget(self.lockout_lbl, r + 2, 0, 1, 2)
-        grid.setRowStretch(r + 3, 1)
+        grid.setRowStretch(r + 2, 1)
         panel.setFixedWidth(330)
         return panel
 
@@ -1112,10 +1108,6 @@ class ChartTrader(QtWidgets.QMainWindow):
                     self.plot.addItem(ln); self.trap_lines.append(ln)
             self.atm_btn.setText(f"ATM: {sn.atm_name}  (Risk {sn.max_risk})")
             self.notice.setText(sn.notice.replace("\n", " "))
-            locked = sn.cfg.enable_daily_loss_lockout and sn.locked
-            for b, _, _ in self.entry_btns: b.setEnabled(not locked)
-            self.lockout_lbl.setText(f"TRADING LOCKED – {sn.losses_today} loss(es) today")
-            self.lockout_lbl.setVisible(locked)
         # Pending moves: keep showing the new price until the exchange confirms it (or the order is gone)
         open_px = {oid: px for *_, px, oid, _ in st.open_orders}
         self.pending_moves = {oid: p for oid, p in self.pending_moves.items()

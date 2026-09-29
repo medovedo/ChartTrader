@@ -9,7 +9,7 @@ SimulatedExchange (streaming backtest), not from custom logic.
 |---|---|
 | `replay_engine.py` | Wrapper around `BacktestEngine(streaming=True)`; `ManualStrategy` accepts click orders and acts as the broker for the Sniper |
 | `range_bars.py` | Range-bar aggregator (NinjaTrader style, fixed tick range, no phantom gap) and tick-bar aggregator |
-| `sniper.py` | Port of the NinjaTrader strategy LotsenhofSniper (Smart/Deep/Momentum entries, structure stop, auto-BE, swing trail, daily lockout) |
+| `sniper.py` | Port of the NinjaTrader strategy LotsenhofSniper (Smart/Deep/Momentum entries, structure stop, auto-BE, swing trail; without the original's daily loss lockout) |
 | `atm_templates.py` | Reads NinjaTrader ATM templates (`Documents/NinjaTrader 8/templates/AtmStrategy/*.xml`) |
 | `data_loader.py` | Databento DBN → `TradeTick`; `synthetic()` for tests without data |
 | `fetch_databento.py` | Query cost, download trades + definition |
@@ -31,7 +31,7 @@ run `pip install nautilus_trader-*.whl` first, then install the rest from `requi
 ## Smoke tests (headless, no Qt)
 ```bash
 python smoke_test.py      # Engine: market, limit, bracket/OCO, flatten, jump
-python test_sniper.py     # Sniper: setups, trap, fills, stops, BE, trail, lockout, cancel, scratch
+python test_sniper.py     # Sniper: setups, trap, fills, stops, BE, trail, partial fill, cancel, scratch
 ```
 Both play constructed ticks through the SimulatedExchange. Run them before every change to
 `replay_engine.py` or `sniper.py`.
@@ -173,8 +173,8 @@ are read directly from `Documents\NinjaTrader 8\templates\AtmStrategy\<Name>.xml
   is complete. ATM breakeven from the template (e.g. from +10 ticks). After the Target1 fill the runner
   stop moves to breakeven, then swing trail (strength 2, min. 8 ticks prominence, 1 tick buffer).
 - **Cancellation**: unfilled entry after 10 ticks of runway or 3 bars; partial-fill remainder after 10 ticks.
-- **Daily lockout**: after 1 losing trade, new entries are locked until the next CME trading day;
-  Scratch and Cancel stay active. The lockout applies only to the current session.
+- **No daily lockout**: unlike the NT strategy, a losing trade does not lock further entries in the
+  replay, so a day can be traded through for practice.
 
 Parameters: `SniperConfig` in `sniper.py` (defaults as in the NT strategy).
 
