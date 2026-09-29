@@ -2,7 +2,7 @@
 
 Controls
   Space         Play / pause (real-time: 1x = tick timestamps in real time)
-  + / -         Speed factor (0.5x ... 100x); pauses > 3 s are shortened
+  Right / Left  Speed factor up / down (0.5x ... 100x); pauses > 3 s are shortened
   N             Single step (one range bar)
   Mouse wheel   more / fewer visible bars
   Ctrl+wheel    compress / stretch price axis (also Ctrl + vertical drag)
@@ -360,6 +360,7 @@ class ChartTrader(QtWidgets.QMainWindow):
         self.timer = QtCore.QTimer(self); self.timer.timeout.connect(self.step)
         self.plot.scene().sigMouseClicked.connect(self.on_click)
         self.plot.scene().sigMouseMoved.connect(self.on_move)
+        self.plot.installEventFilter(self)   # hotkeys take precedence over pyqtgraph's own keys
         self._feed_context(self.context_ticks)   # previous day as candles before the first replay bar
         self._play(self.ticks_per_step)  # create first bar
         self._sync_clock(); self._drain_events(); self.refresh()
@@ -687,7 +688,19 @@ class ChartTrader(QtWidgets.QMainWindow):
             hit = self._hit_trendline(ev.scenePos())
             self.select_line(hit[0] if hit else None)
 
+    def eventFilter(self, obj, ev):
+        # Hotkeys before pyqtgraph: after a click into the chart the ViewBox is the scene's focus item
+        # and takes +/- for its zoom history, the QGraphicsView takes arrow keys for scrolling.
+        if obj is self.plot and ev.type() == QtCore.QEvent.KeyPress and self._handle_key(ev):
+            return True
+        return super().eventFilter(obj, ev)
+
     def keyPressEvent(self, e):
+        if not self._handle_key(e):
+            super().keyPressEvent(e)
+
+    def _handle_key(self, e) -> bool:
+        """Hotkeys; True = handled."""
         k, mod = e.key(), e.modifiers()
         shift = bool(mod & QtCore.Qt.ShiftModifier)
         ctrl = bool(mod & QtCore.Qt.ControlModifier)
@@ -710,11 +723,14 @@ class ChartTrader(QtWidgets.QMainWindow):
         elif sn and k == QtCore.Qt.Key_Down and ctrl: self.sniper_action(lambda: sn.momentum(False))
         elif sn and k == QtCore.Qt.Key_X: self.sniper_action(sn.cancel_all)
         elif sn and k == QtCore.Qt.Key_C and not ctrl: self.sniper_action(sn.scratch)
-        elif k in (QtCore.Qt.Key_Plus, QtCore.Qt.Key_Equal):
+        elif k == QtCore.Qt.Key_Right and not (ctrl or shift):
             self.speed_idx = min(len(SPEEDS) - 1, self.speed_idx + 1)
-        elif k == QtCore.Qt.Key_Minus:
+        elif k == QtCore.Qt.Key_Left and not (ctrl or shift):
             self.speed_idx = max(0, self.speed_idx - 1)
+        else:
+            return False
         self.refresh()
+        return True
 
     # --- Display ------------------------------------------------------------
     def _drain_events(self):

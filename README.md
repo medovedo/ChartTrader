@@ -128,7 +128,7 @@ The log below the chart shows a `JOURNAL` line for each trade.
 | Key / mouse | Action |
 |---|---|
 | Space | Play / pause – real-time: at 1x data time passes like the clock; gaps without trades are shortened to 3 s |
-| + / − | Speed factor 0.5x … 100x (relative to data time) |
+| → / ← | Speed factor up / down, 0.5x … 100x (relative to data time); shown in the status line |
 | N | Advance one range bar |
 | Mouse wheel | More / fewer bars in view (20 to 600) |
 | Ctrl+mouse wheel, Ctrl+vertical drag | Compress / stretch price axis; view follows price |
