@@ -295,6 +295,7 @@ class AtmTrade:
     runner_stop_adjusted: bool = False
     stop_notified: bool = False
     be_triggered: bool = False
+    t1_filled: bool = False            # Target1 filled -> runner trail may run (independent of auto-BE)
     current_runner_stop: float = 0.0
     scratch_target: float = 0.0
 
@@ -629,8 +630,10 @@ class Sniper:
                 self._tighten_stop(t, t.brackets[1], be, "AUTO-BE")
                 t.be_triggered = True
 
-        # Runner swing trail after breakeven, once per new bar
-        if self.cfg.enable_runner_trail and t.be_triggered and new_bar and t.has_runner:
+        # Runner swing trail once Target1 is filled (independent of auto-BE, as in the original), once per new bar
+        if self.cfg.enable_runner_trail and t.has_runner and not t.t1_filled:
+            t.t1_filled = self.b.order_view(t.brackets[0].tp).status == "FILLED"
+        if self.cfg.enable_runner_trail and (t.be_triggered or t.t1_filled) and new_bar and t.has_runner:
             cand = swing_trail_candidate(t.is_long, self.bars + [b0], t.setup_bar, t.current_runner_stop,
                                          tick, self.cfg)
             if cand is not None:
@@ -655,6 +658,20 @@ class Sniper:
         if br.is_runner:
             t.current_runner_stop = price
         self._log(f"{why}: {'Stop2' if br.is_runner else 'Stop1'} moved to {price}")
+
+    def on_manual_move(self, oid: Any, price: float) -> None:
+        """Stop/target dragged in the chart: keep it, the Sniper only tightens from there
+        (no later structural stop or target alignment overwrites it)."""
+        for t in self.trades:
+            for br in t.brackets:
+                if br.sl == oid:
+                    if br.is_runner:
+                        t.current_runner_stop = price
+                        t.runner_stop_adjusted = True
+                    else:
+                        t.stop1_adjusted = t.stop_notified = True
+                elif br.tp == oid:
+                    br.targets_aligned = True
 
     def _cancel_trade(self, t: AtmTrade) -> None:
         for br in t.brackets:

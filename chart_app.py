@@ -19,6 +19,8 @@ Controls
   X             Cancel All (trap, entries, positions)
   C             Scratch: targets to break-even + offset
   Mouse clicks in the chart place no orders (only buttons and keys).
+  Drag stop/target line: moves the order of a filled bracket (thick lines; effective on the next tick,
+                a stop on the wrong side of the market is rejected and snaps back)
   F             Flatten (close everything, cancel orders)
   Jump to       choose date/time + time zone, 'Go' – chart shows the last
                 bars before that time as context, replay starts there
@@ -310,6 +312,9 @@ class ChartTrader(QtWidgets.QMainWindow):
         self.trendlines: list[TrendLine] = []
         self.selected_line: TrendLine | None = None
         self._drag = None               # (line, handle, original coordinates, start point) while dragging
+        self._draggable: list[tuple] = []   # bracket legs from the last refresh: (id, price)
+        self._order_drag = None         # [id, original price, current price] while dragging an order line
+        self.pending_moves: dict = {}   # id -> new price until the exchange applies it (next tick)
         self.draw_mode = False
         self.draw_start: tuple[float, float] | None = None
         self.preview = pg.PlotCurveItem(pen=pg.mkPen("#e0e0e0", width=1, style=QtCore.Qt.DashLine))
@@ -593,12 +598,46 @@ class ChartTrader(QtWidgets.QMainWindow):
                 return tl, h
         return None
 
+    def _hit_order(self, scene_pos, tol_px: float = 6.0):
+        """Bracket leg (stop/target of a filled entry) near the mouse -> (id, price), else None."""
+        vb = self.plot.plotItem.vb
+        x = vb.mapSceneToView(scene_pos).x()
+        best = None
+        for oid, px in self._draggable:
+            d = abs(vb.mapViewToScene(QtCore.QPointF(x, px)).y() - scene_pos.y())
+            if d <= tol_px and (best is None or d < best[0]):
+                best = (d, oid, px)
+        return best[1:] if best else None
+
+    def _drag_order(self, ev) -> None:
+        """Drag a stop/target line; on release the order is modified (effective on the next tick)."""
+        oid, px0, _ = self._order_drag
+        vb = self.plot.plotItem.vb
+        dy = vb.mapSceneToView(ev.scenePos()).y() - vb.mapSceneToView(ev.buttonDownScenePos()).y()
+        self._order_drag[2] = round(px0 + round(dy / self.inc) * self.inc, 10)
+        if ev.isFinish():
+            price = self._order_drag[2]
+            self._order_drag = None
+            if price != px0:
+                self.engine.strategy.move_order(oid, price)
+                self.pending_moves[oid] = price
+                self.log.appendPlainText(f"Order moved {px0:.2f} -> {price:.2f} (effective on the next tick)")
+        self.refresh()
+
     def on_line_drag(self, ev) -> bool:
-        """Drag a line/an endpoint (Shift: drag a copy). False = no hit, ViewBox may pan.
-        Also works in draw mode: clicks draw, dragging on a line moves it."""
+        """Drag a stop/target line or a trend line/an endpoint (Shift: drag a copy). False = no hit,
+        ViewBox may pan. Also works in draw mode: clicks draw, dragging on a line moves it."""
         if ev.button() != QtCore.Qt.LeftButton:
             return False
         vb = self.plot.plotItem.vb
+        if ev.isStart():
+            hit = self._hit_order(ev.buttonDownScenePos())
+            if hit is not None:
+                self._order_drag = [hit[0], hit[1], hit[1]]
+                ev.accept(); return True
+        if self._order_drag is not None:
+            self._drag_order(ev)
+            ev.accept(); return True
         if ev.isStart():
             hit = self._hit_trendline(ev.buttonDownScenePos())
             if hit is None:
@@ -684,6 +723,8 @@ class ChartTrader(QtWidgets.QMainWindow):
             if msg.startswith("FILL"):
                 _, side, _, _, px = msg.split()
                 self.markers.append((len(self.agg.bars), float(px), side))
+            elif msg.startswith("MODIFY REJECTED"):
+                self.pending_moves.clear()     # line snaps back to the price the exchange still holds
 
     # --- Zoom / scaling -----------------------------------------------------
     def zoom_x(self, factor: float):
@@ -826,10 +867,21 @@ class ChartTrader(QtWidgets.QMainWindow):
             for b, _, _ in self.entry_btns: b.setEnabled(not locked)
             self.lockout_lbl.setText(f"TRADING LOCKED – {sn.losses_today} loss(es) today")
             self.lockout_lbl.setVisible(locked)
-        for typ, side, qty, px in st.open_orders:
+        # Pending moves: keep showing the new price until the exchange confirms it (or the order is gone)
+        open_px = {oid: px for *_, px, oid, _ in st.open_orders}
+        self.pending_moves = {oid: p for oid, p in self.pending_moves.items()
+                              if oid in open_px and abs(open_px[oid] - p) > self.inc / 2}
+        self._draggable = []
+        for typ, side, qty, px, oid, is_leg in st.open_orders:
+            if self._order_drag is not None and self._order_drag[0] == oid:
+                px = self._order_drag[2]
+            else:
+                px = self.pending_moves.get(oid, px)
+            if is_leg:
+                self._draggable.append((oid, px))
             col = "#42a5f5" if typ == "LIMIT" else "#ab47bc"
-            ln = pg.InfiniteLine(pos=px, angle=0, pen=pg.mkPen(col, width=1),
-                                 label=f"{typ} {side} {qty:g}", labelOpts={"position": 0.02, "color": col})
+            ln = pg.InfiniteLine(pos=px, angle=0, pen=pg.mkPen(col, width=2 if is_leg else 1),
+                                 label=f"{typ} {side} {qty:g} @ {px:.2f}", labelOpts={"position": 0.02, "color": col})
             self.plot.addItem(ln); self.order_lines.append(ln)
         ts = datetime.fromtimestamp(st.ts / 1e9, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         self.status.setText(
@@ -866,7 +918,7 @@ def main():
     ap.add_argument("--list", action="store_true", help="Show contracts per file and exit")
     args = ap.parse_args()
 
-    from data_loader import day_file, previous_day_file
+    from data_loader import day_file, previous_day_files
     for day in args.day or []:
         path = day_file(day, args.data_dir, args.schema)
         if not path.exists():
@@ -884,22 +936,23 @@ def main():
     if args.trades:
         instrument, ticks = load_databento(args.trades, args.definition, symbol=args.symbol)
         print(f"{instrument.id}: {len(ticks)} ticks from {len(args.trades)} file(s)")
-        ctx_path = args.context
-        if ctx_path is None:
+        ctx_paths = [args.context] if args.context else []
+        if not ctx_paths:
             if args.day:
-                ctx_path = previous_day_file(min(args.day), args.data_dir, args.schema)
+                ctx_paths = previous_day_files(min(args.day), args.data_dir, args.schema)
             else:
                 # File path: derive date, schema and folder from the Databento file name
                 import re
                 first = Path(sorted(args.trades)[0])
                 m = re.search(r"(\d{4})(\d{2})(\d{2})\.(trades|mbo)\.dbn", first.name)
                 if m:
-                    ctx_path = previous_day_file("-".join(m.groups()[:3]), first.parent, m.group(4))
-        if ctx_path:
+                    ctx_paths = previous_day_files("-".join(m.groups()[:3]), first.parent, m.group(4))
+        if ctx_paths:
             try:
-                _, context_ticks = load_databento(ctx_path, args.definition, symbol=str(instrument.id))
+                _, context_ticks = load_databento(ctx_paths, args.definition, symbol=str(instrument.id))
                 context_ticks = [t for t in context_ticks if t.ts_event < ticks[0].ts_event]
-                print(f"Context (previous day): {len(context_ticks)} ticks from {ctx_path}")
+                names = ", ".join(Path(p).name for p in ctx_paths)
+                print(f"Context (previous day): {len(context_ticks)} ticks from {names}")
             except ValueError as e:
                 print(f"No previous-day context: {e}")
         else:

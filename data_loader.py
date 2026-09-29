@@ -194,16 +194,27 @@ def day_file(day: str, data_dir: str | Path, schema: str = "trades") -> Path:
     return Path(data_dir) / f"glbx-mdp3-{day.replace('-', '')}.{schema}.dbn.zst"
 
 
-def previous_day_file(day: str, data_dir: str | Path, schema: str = "trades", max_back: int = 5) -> Path | None:
-    """Daily file of the previous trading day (up to max_back calendar days back, e.g. across weekends)."""
+def previous_day_files(day: str, data_dir: str | Path, schema: str = "trades", max_back: int = 7,
+                       min_ratio: float = 0.1) -> list[Path]:
+    """Files back to and including the previous full trading day, oldest first (empty if none).
+
+    Sunday and holiday files (e.g. 1 Jan) only hold the Globex reopen in the evening; they belong
+    to the next session and are included, but the search continues past them. A file counts as
+    a full trading day if it has at least `min_ratio` of the size of the replay day's file.
+    """
     from datetime import date, timedelta
     d = date.fromisoformat(day)
+    ref = day_file(day, data_dir, schema)
+    min_size = max(1_000_000, int(ref.stat().st_size * min_ratio)) if ref.exists() else 1_000_000
+    found: list[Path] = []
     for back in range(1, max_back + 1):
-        prev = d - timedelta(days=back)
-        path = day_file(prev.isoformat(), data_dir, schema)
-        if path.exists() and path.stat().st_size > 1_000_000:   # weekend files are tiny
-            return path
-    return None
+        path = day_file((d - timedelta(days=back)).isoformat(), data_dir, schema)
+        if not path.exists():
+            continue
+        found.insert(0, path)
+        if path.stat().st_size >= min_size:
+            return found
+    return []
 
 
 def contracts_in(trades_path: str | Path) -> dict[str, int]:

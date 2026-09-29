@@ -84,6 +84,17 @@ def main() -> int:
     check(s.net_qty == 1, f"Bracket entry filled, net={s.net_qty}")
     types = sorted(o[0] for o in s.open_orders)
     check(types == ["LIMIT", "STOP_MARKET"], f"Target + stop open: {types}")
+    check(all(o[5] for o in s.open_orders), "Target + stop are marked as bracket legs (draggable)")
+    sl = next(o for o in s.open_orders if o[0] == "STOP_MARKET")
+    strat.move_order(sl[4], sl[3] - 2 * inc)
+    engine.step(1)                                   # modify takes effect on the next tick
+    moved = next(o for o in engine.state().open_orders if o[4] == sl[4])
+    check(moved[3] == sl[3] - 2 * inc, f"Stop moved {sl[3]} -> {moved[3]}")
+    strat.move_order(sl[4], engine.last_price + 2 * inc)   # sell stop above the market
+    engine.step(1)
+    kept = next(o for o in engine.state().open_orders if o[4] == sl[4])
+    check(kept[3] == moved[3] and any(e.startswith("MODIFY REJECTED") for e in strat.events),
+          f"Stop on the wrong side of the market rejected, stays at {kept[3]}")
     hit = step_until(engine, lambda st: st.net_qty == 0, max_ticks=5000)
     s = engine.state()
     check(hit, f"Bracket closed (target or stop), realized={s.realized:.2f}")

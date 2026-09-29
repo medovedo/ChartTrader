@@ -171,6 +171,18 @@ class ManualStrategy(Strategy):
     def close_all(self) -> None:
         self.flatten()
 
+    def move_order(self, oid: ClientOrderId, price: float) -> None:
+        """Move a working order from the GUI (limit: price, stop: trigger). Takes effect on the next tick."""
+        o = self.cache.order(oid)
+        if o is None or not o.is_open:
+            return
+        if o.order_type == OrderType.STOP_MARKET:
+            self.modify(oid, trigger_price=price)
+        else:
+            self.modify(oid, price=price)
+        if self.sniper is not None:
+            self.sniper.on_manual_move(oid, price)
+
     def log(self, msg: str) -> None:
         self.events.append(msg)
 
@@ -182,7 +194,7 @@ class ReplayState:
     net_qty: float
     unrealized: float
     realized: float
-    open_orders: list[tuple[str, str, float, float]]  # (type, side, qty, price)
+    open_orders: list[tuple[str, str, float, float, ClientOrderId, bool]]  # (type, side, qty, price, id, bracket leg)
 
 
 class ReplayEngine:
@@ -273,5 +285,6 @@ class ReplayEngine:
         orders = []
         for o in cache.orders_open(instrument_id=iid):
             px = getattr(o, "price", None) or getattr(o, "trigger_price", None)
-            orders.append((o.order_type.name, o.side.name, float(o.leaves_qty), float(px) if px else 0.0))
+            orders.append((o.order_type.name, o.side.name, float(o.leaves_qty), float(px) if px else 0.0,
+                           o.client_order_id, o.parent_order_id is not None))
         return ReplayState(self.ts, self.last_price, net, unreal, realized, orders)

@@ -54,7 +54,10 @@ bewusste Architekturentscheidung – keine eigene Fill-Simulation bauen.
 
 ## Verifiziert (headless, QT_QPA_PLATFORM=offscreen)
 Market-Entry, Limit-Target-Fill, OCO löscht Gegenorder, Flatten, Sprung + Trade danach,
-Rücksprung wird abgelehnt (`smoke_test.py`). Zeitgetreue Wiedergabe: 1x/10x folgen der
+Rücksprung wird abgelehnt, Bracket-Stop verschieben (`move_order`, wirksam beim nächsten Tick;
+Stop auf falscher Marktseite → MODIFY REJECTED) (`smoke_test.py`). Ziehen in der GUI: Nur offene
+Orders mit Parent (= Bracket-Legs nach Entry-Fill) sind ziehbar; `pending_moves` zeigt den neuen Preis bis
+zur Bestätigung. `Sniper.on_manual_move` übernimmt manuelle Stops (Trail/BE ziehen nur enger nach). Zeitgetreue Wiedergabe: 1x/10x folgen der
 Uhr, Pause/N/Sprung synchronisieren, 60-s-Lücke wird zu ~3 s. Databento-Laden aus lokalen
 DBN-Dateien (Ein- und Mehrtages, Kontraktauswahl) verifiziert; `fetch_databento.py` (API) ungetestet.
 Sniper (`test_sniper.py`, Tick-Bars mit konstruierten Pfaden): Smart Long Fill → Stop1/Stop2 auf

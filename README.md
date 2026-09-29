@@ -94,8 +94,8 @@ Check the cost beforehand: `python fetch_databento.py 2025-09-22 2025-09-23 ESZ5
 (requires `DATABENTO_API_KEY`). MBO days are considerably larger than trades days.
 Candle body width via `--bar-width 50` (percent of bar spacing) or live in the "Width" field.
 EMA line via `--ema 21` (0 = off), orange, on bar closes including the running bar.
-With `--day`, the previous trading day is loaded automatically as context (weekends are
-skipped): its candles are in the chart from the start, and "Jump to" shows all
+With `--day`, the previous trading day is loaded automatically as context (Sunday and holiday
+files, which only hold the evening Globex reopen, are included and searched past): its candles are in the chart from the start, and "Jump to" shows all
 candles from the previous day up to the jump target. For file paths, pass `--context FILE`.
 Context ticks only go through the aggregator, not through the engine.
 Playback constants (speed factors, idle-gap shortening, drawing window) are at the top of `chart_app.py`.
@@ -121,6 +121,7 @@ Playback constants (speed factors, idle-gap shortening, drawing window) are at t
 | X | Sniper: Cancel All (trap, entries, positions) |
 | C | Sniper: Scratch, targets to breakeven + offset |
 | Mouse click in chart | Places no orders; trading only via buttons and keys (clicks are only for trend lines) |
+| Drag stop/target line | Moves the stop or target of a filled bracket (manual bracket and Sniper; drawn thick). Takes effect on the next tick, the line shows the new price in the meantime. A stop on the wrong side of the market is rejected by the exchange and snaps back. The Sniper keeps manual moves and only tightens from there (BE, trail) |
 | F | Flatten: cancel orders, close position |
 | Jump to + Go | Date/time in the selected time zone (default Europe/Berlin); shows the last ~20k ticks as context bars, replay starts there. Only when flat with no open orders, forward only |
 

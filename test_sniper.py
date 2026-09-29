@@ -149,9 +149,15 @@ def main() -> int:
     check(t.stop1_adjusted and v[0][1].trigger_price == 99.75, f"Stop1 at structural stop: {v[0][1].trigger_price}")
     check(t.runner_stop_adjusted and v[1][1].trigger_price == 99.75, f"Stop2 at structural stop: {v[1][1].trigger_price}")
     check(v[0][2].price == 105.25 and v[1][2].price == 108.25, f"Targets +12/+24: {v[0][2].price}, {v[1][2].price}")
+    h.strat.move_order(t.brackets[0].sl, 99.50)     # dragged in the chart: Stop1 looser, Stop2 tighter
+    h.strat.move_order(t.brackets[1].sl, 101.00)
+    h.run_to(31)
+    v = h.views(t)
+    check(v[0][1].trigger_price == 99.50 and v[1][1].trigger_price == 101.00 and t.current_runner_stop == 101.00,
+          f"Manual stop moves kept: Stop1 {v[0][1].trigger_price}, Stop2 {v[1][1].trigger_price}")
     h.run_to(34)                                    # 104.75 = +10 ticks, template has no ATM-BE
     v = h.views(t)
-    check(v[0][1].trigger_price == 99.75 and v[1][1].trigger_price == 99.75, f"No ATM breakeven at +10: {v[0][1].trigger_price}")
+    check(v[0][1].trigger_price == 99.50 and v[1][1].trigger_price == 101.00, f"No ATM breakeven at +10: {v[0][1].trigger_price}")
     h.run_to(37)                                    # 105.25 -> Target1
     v = h.views(t)
     check(v[0][2].status == "FILLED" and h.net() == 1, f"Target1 filled, runner remains: net={h.net()}")
@@ -164,6 +170,16 @@ def main() -> int:
     check(h.net() == 0 and not h.sn.trades and not st.open_orders, f"Runner stopped out, trade finished, open={st.open_orders}")
     check(abs(st.realized - 375.0) < 1e-6, f"Realized PnL {st.realized:.2f} (expected 375.00)")
     check(not h.sn.locked, "Winning trade: no lockout")
+
+    # ---------- 2b. Same path without auto-BE: trail still starts after Target1 (as in the original) ----------
+    h = Harness(BAR_A + BAR_B + BAR_C + BAR_D + BAR_D2 + BAR_E + BAR_F + BAR_G + BAR_H + FLAT,
+                SniperConfig(enable_auto_breakeven=False))
+    h.run_to(22); h.sn.arm_smart(True); h.run_to(37)
+    t = h.sn.trades[0]
+    check(t.t1_filled and not t.be_triggered and h.views(t)[1][1].trigger_price == 99.75,
+          f"No auto-BE: Stop2 stays at structural stop after Target1: {h.views(t)[1][1].trigger_price}")
+    h.run_to(81)
+    check(h.views(t)[1][1].trigger_price == 103.75, f"Trail without auto-BE: Stop2 at 103.75: {h.views(t)[1][1].trigger_price}")
 
     # ---------- 3. Smart Short: loss -> daily lockout ----------
     h = Harness(BAR_I0 + BAR_I + BAR_J + BAR_K + FLAT + FLAT)
