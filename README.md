@@ -13,6 +13,8 @@ SimulatedExchange (streaming backtest), not from custom logic.
 | `atm_templates.py` | Reads NinjaTrader ATM templates (`Documents/NinjaTrader 8/templates/AtmStrategy/*.xml`) |
 | `data_loader.py` | Databento DBN → `TradeTick`; `synthetic()` for tests without data |
 | `fetch_databento.py` | Query cost, download trades + definition |
+| `export_nt8.py` | Databento ticks → NinjaTrader 8 import file |
+| `export_bars.py` | Bars → CSV files like NT's TickBarsExporter indicator |
 | `chart_app.py` | PySide6/pyqtgraph UI |
 
 ## Installation
@@ -90,6 +92,19 @@ in UTC (select "UTC" in the import dialog, or use `--tz Europe/Berlin`). The ins
 must exist in NT (NT calls it `ES DEC25` in the log). Import the .txt uncompressed: NT's
 text importer reads archives as text and then reports "Import field separator could not be
 identified". NT's Playback in "Historical" mode then runs on the same ticks.
+**Bar export like NT's TickBarsExporter** (same file names and format, for line-by-line comparison):
+```bash
+python export_bars.py --day 2025-01-02 --data-dir D:\trading\GLBX-20260926-JAN_MAI --symbol ESH5
+python export_bars.py --all --data-dir PATH --symbol ESH5 --bars range:4 --out "G:\Meine Ablage\Trading\Bar_Export.csv"
+```
+Writes `Bar_Export_ESMAR25_2000 - Tick_2025-01-02.csv` (default folder `bar_export/`): bar time = last
+tick in Europe/Berlin, decimal comma, UTF-8 with BOM, CRLF, one file per date. Bars restart at the CME
+session start; the partial last bar of a session is exported, a bar still forming at the end of the data
+is not. Existing files are only extended with newer bars (like ProtectExistingData), `--overwrite`
+rewrites them. The previous file(s) are loaded automatically for the session start. Verified against
+NT's own exports (ESH5 MBO, Jan/Mar 2025): byte-identical where NT exported complete sessions.
+Careful with `--out` into NT's export folder: the file names are the same as NT's, so the files would be extended.
+
 Check the cost beforehand: `python fetch_databento.py 2025-09-22 2025-09-23 ESZ5 --schema mbo --cost-only`
 (requires `DATABENTO_API_KEY`). MBO days are considerably larger than trades days.
 Candle body width via `--bar-width 50` (percent of bar spacing) or live in the "Width" field.

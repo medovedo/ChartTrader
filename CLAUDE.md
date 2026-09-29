@@ -51,6 +51,12 @@ bewusste Architekturentscheidung – keine eigene Fill-Simulation bauen.
   Ziel nur durch den Aggregator, dann `engine.skip_to`. EMA (`--ema`, Cache `_ema` je Aggregator)
   und Körperbreite (`--bar-width`, Feld "Breite") sind Anzeigeoptionen.
 - `fetch_databento.py` – Kosten abfragen, dann Trades + Definition laden.
+- `export_bars.py` – Bars als CSV wie NTs Indikator `TickBarsExporter.cs` (Dateiname
+  `Bar_Export_ESMAR25_2000 - Tick_<Datum>.csv`, Zeit = letzter Tick in Berlin, Dezimalkomma, BOM, CRLF,
+  nur anhängen). Streamt Vortagsdateien + Tage, Session-Ende ohne Folge-Tick via `agg.end_session()`.
+  Gegen NT-Exporte ESH5 (MBO) verifiziert: byte-identisch (2.1., 3.1., 9.1., 10.1., 5.–6.3.2025);
+  NT-Dateien mit Playback-Sprung/Abbruch sind Präfix bzw. Teilmenge. NT lässt die letzte Chart-Bar weg
+  (`Bars.Count - 2`), daher fehlt dort am Datenende die Session-Teilbar.
 
 ## Verifiziert (headless, QT_QPA_PLATFORM=offscreen)
 Market-Entry, Limit-Target-Fill, OCO löscht Gegenorder, Flatten, Sprung + Trade danach,

@@ -77,6 +77,19 @@ class _SessionMixin:
     def _on_session_close(self) -> None:
         pass
 
+    def end_session(self) -> list:
+        """Close the running bar because its session is over and no further trade follows (e.g. Friday);
+        the next trade then only starts the new session."""
+        if self.current is None:
+            return []
+        b = self.current
+        b.closed = True
+        self.bars.append(b)
+        self.bar_numbers.append(self.current_no)
+        self.current = None
+        self._on_session_close()
+        return [b]
+
     def number_of(self, i: int) -> int | None:
         """Session number of the bar at index i (closed and running bar)."""
         if 0 <= i < len(self.bar_numbers):
