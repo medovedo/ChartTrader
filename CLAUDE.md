@@ -51,7 +51,11 @@ bewusste Architekturentscheidung – keine eigene Fill-Simulation bauen.
   `_sync_clock()` aufrufen, sonst holt die Uhr nach. "Springe zu" = bisect auf `engine.ts_index`,
   Aggregator zurücksetzen, `context_ticks` (Vortag, via `--day` automatisch) + alle Ticks bis zum
   Ziel nur durch den Aggregator, dann `engine.skip_to`. EMA (`--ema`, Cache `_ema` je Aggregator)
-  und Körperbreite (`--bar-width`, Feld "Breite") sind Anzeigeoptionen.
+  und Körperbreite (`--bar-width`, Feld "Width") sind Anzeigeoptionen.
+  Zeichenobjekte (`self.drawings`): `TrendLine` und `TextNote` (Taste A) teilen eine Schnittstelle
+  (`hit`, `update`, `set_selected`, `coords`, `drag_to`, `clone`, `remove`); Auswahl, Ziehen, Shift+Ziehen,
+  Strg+C, Entf laufen generisch. pyqtgraph meldet einen Doppelklick erst beim Loslassen (headless: nach
+  `QTest.mouseDClick` ein `mouseRelease` senden).
 - `fetch_databento.py` – Kosten abfragen, dann Trades + Definition laden.
 - `trade_journal.py` – Trade-Log `journal/trade_log.csv` (`--journal`), eine Zeile je Position flat→flat
   aus `PositionClosed`-Events. **NETTING verwendet die Position-ID wieder, `cache.positions_closed()` hält

@@ -134,10 +134,12 @@ The log below the chart shows a `JOURNAL` line for each trade.
 | Ctrl+mouse wheel, Ctrl+vertical drag | Compress / stretch price axis; view follows price |
 | R | Price axis back to auto |
 | T | Trend line: two left clicks place the line (preview follows the mouse), then drawing mode turns off; right click or Esc cancels. The line is extended to the right as a dashed line |
-| Click on line | Select trend line (yellow, endpoints as handles); clicking empty space clears the selection |
-| Drag | Move line; on an endpoint, only that point; Shift+drag drags a copy |
-| Ctrl+C | Copy selected trend line (the copy appears slightly offset and is selected) |
-| Del / Shift+Del | Delete selected trend line (without selection: the last one) / all; a jump deletes all because bar indices are rebuilt |
+| A | Text: click the position in the chart, enter the text (multi-line) in the dialog; then the mode is off again. Right click or Esc cancels |
+| Double click on text | Edit the text (emptying it deletes it) |
+| Click on line / text | Select it (yellow; a line shows its endpoints as handles); clicking empty space clears the selection |
+| Drag | Move line or text; on a line endpoint, only that point; Shift+drag drags a copy |
+| Ctrl+C | Copy selected line or text (the copy appears slightly offset and is selected); a text is also put on the clipboard |
+| Del / Shift+Del | Delete the selected drawing (without selection: the last one) / all; a jump deletes all because bar indices are rebuilt |
 | Ctrl+B / Ctrl+S | Market buy / sell |
 | Shift+B / Shift+S | Bracket (market + OCO target/stop, ticks from the input fields) |
 | W / S | Sniper: Smart Long / Short (arm trap) |

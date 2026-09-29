@@ -11,6 +11,9 @@ Controls
                 mode is off again; right click/Esc cancels. Click selects a line, dragging moves
                 it (at an endpoint: only the point), Shift+drag drags a copy, Ctrl+C copies
                 the selected line, Del deletes it (without selection the last one), Shift+Del all
+  A             Text: click the position, enter the text (multi-line). Select, drag, Shift+drag,
+                Ctrl+C (copy, text also to the clipboard) and Del like trend lines; double click edits
+                (empty text deletes). A jump deletes all drawings (bar indices are rebuilt)
   Ctrl+B/S      Market Buy / Sell (quantity from field)
   Shift+B/S     Bracket Buy / Sell (target/stop in ticks from fields)
   Sniper (port of LotsenhofSniper, panel on the right):
@@ -214,6 +217,25 @@ class TrendLine:
     def ordered(self):
         return (self.x1, self.y1, self.x2, self.y2) if self.x2 >= self.x1 else (self.x2, self.y2, self.x1, self.y1)
 
+    # Drawing interface (shared with TextNote): coordinates for dragging, copy, remove
+    def coords(self) -> tuple:
+        return self.x1, self.y1, self.x2, self.y2
+
+    def drag_to(self, orig: tuple, handle: str, dx: float, dy: float):
+        x1, y1, x2, y2 = orig
+        if handle == "p1":
+            self.x1, self.y1 = x1 + dx, y1 + dy
+        elif handle == "p2":
+            self.x2, self.y2 = x2 + dx, y2 + dy
+        else:
+            self.x1, self.y1, self.x2, self.y2 = x1 + dx, y1 + dy, x2 + dx, y2 + dy
+
+    def clone(self, offset_y: float = 0.0) -> "TrendLine":
+        return TrendLine(self.plot, self.x1, self.y1 + offset_y, self.x2, self.y2 + offset_y)
+
+    def describe(self) -> str:
+        return "Trend line"
+
     def remove(self):
         for it in (self.seg, self.ext, self.handles):
             self.plot.removeItem(it)
@@ -235,6 +257,54 @@ class TrendLine:
         t = 0.0 if l2 == 0 else max(0.0, min(1.0, ((px - a.x()) * dx + (py - a.y()) * dy) / l2))
         cx, cy = a.x() + t * dx, a.y() + t * dy
         return "body" if ((px - cx) ** 2 + (py - cy) ** 2) ** 0.5 <= tol_px else None
+
+
+class TextNote:
+    """Text at (bar index, price), left edge vertically centred on the point; fixed pixel size."""
+    COLOR, SELECTED = "#e0e0e0", "#ffd54f"
+
+    def __init__(self, plot, x: float, y: float, text: str):
+        self.plot = plot
+        self.x, self.y, self.text = x, y, text
+        self.selected = False
+        self.item = pg.TextItem(text, color=self.COLOR, anchor=(0, 0.5))
+        self.item.setFont(QtGui.QFont("Segoe UI", 11))
+        self.item.setZValue(500)
+        plot.addItem(self.item)
+        self.set_selected(False)
+
+    def set_selected(self, on: bool):
+        self.selected = on
+        self.item.border = pg.mkPen(self.SELECTED, width=1) if on else pg.mkPen(None)
+        self.item.setColor(self.SELECTED if on else self.COLOR)
+        self.item.update()
+
+    def set_text(self, text: str):
+        self.text = text
+        self.item.setText(text)
+        self.set_selected(self.selected)     # setText resets the colour
+
+    def update(self, right: float):
+        self.item.setPos(self.x, self.y)
+
+    def coords(self) -> tuple:
+        return self.x, self.y
+
+    def drag_to(self, orig: tuple, handle: str, dx: float, dy: float):
+        self.x, self.y = orig[0] + dx, orig[1] + dy
+
+    def clone(self, offset_y: float = 0.0) -> "TextNote":
+        return TextNote(self.plot, self.x, self.y + offset_y, self.text)
+
+    def describe(self) -> str:
+        return f"Text '{self.text.splitlines()[0] if self.text else ''}'"
+
+    def remove(self):
+        self.plot.removeItem(self.item)
+
+    def hit(self, scene_pos, right: float, tol_px: float = 3.0):
+        r = self.item.sceneBoundingRect().adjusted(-tol_px, -tol_px, tol_px, tol_px)
+        return "body" if r.contains(scene_pos) else None
 
 
 class ChartViewBox(pg.ViewBox):
@@ -310,8 +380,9 @@ class ChartTrader(QtWidgets.QMainWindow):
         self.trap_lines: list[pg.InfiniteLine] = []
         self.day_lines: dict[int, pg.InfiniteLine] = {}    # bar index of day change -> vertical line
         self.num_items: dict[int, pg.TextItem] = {}        # bar index -> number label (every 10th bar)
-        self.trendlines: list[TrendLine] = []
-        self.selected_line: TrendLine | None = None
+        self.drawings: list[TrendLine | TextNote] = []
+        self.selected: TrendLine | TextNote | None = None
+        self.text_mode = False
         self._drag = None               # (line, handle, original coordinates, start point) while dragging
         self._draggable: list[tuple] = []   # bracket legs from the last refresh: (id, price)
         self._order_drag = None         # [id, original price, current price] while dragging an order line
@@ -342,6 +413,8 @@ class ChartTrader(QtWidgets.QMainWindow):
             b = QtWidgets.QPushButton(text); b.clicked.connect(fn); bar.addWidget(b)
         self.draw_btn = QtWidgets.QPushButton("Trend line (T)"); self.draw_btn.setCheckable(True)
         self.draw_btn.clicked.connect(self.toggle_draw); bar.addWidget(self.draw_btn)
+        self.text_btn = QtWidgets.QPushButton("Text (A)"); self.text_btn.setCheckable(True)
+        self.text_btn.clicked.connect(self.toggle_text); bar.addWidget(self.text_btn)
         bar.addSpacing(20); bar.addWidget(QtWidgets.QLabel("Jump to"))
         self.jump_dt = QtWidgets.QDateTimeEdit(); self.jump_dt.setDisplayFormat("yyyy-MM-dd HH:mm")
         self.jump_dt.setCalendarPopup(True)
@@ -502,7 +575,7 @@ class ChartTrader(QtWidgets.QMainWindow):
             self.log.appendPlainText("Time is after the end of the data."); return
         self.engine.reset_aggregator()
         self.markers.clear()
-        self.remove_trendlines(all_lines=True)   # bar indices are rebuilt
+        self.remove_drawings(all_items=True)     # bar indices are rebuilt
         for d in (self.day_lines, self.num_items):
             for it in d.values():
                 self.plot.removeItem(it)
@@ -524,15 +597,52 @@ class ChartTrader(QtWidgets.QMainWindow):
     def flatten(self):
         self.engine.strategy.flatten()
 
-    # --- Trend lines --------------------------------------------------------
+    # --- Drawings: trend lines and text ------------------------------------
     def toggle_draw(self, on: bool | None = None):
         self.draw_mode = (not self.draw_mode) if on is None else bool(on)
+        if self.draw_mode:
+            self.toggle_text(False)
         self.draw_start = None
         self.preview.setData([], [])
         self.draw_btn.setChecked(self.draw_mode)
-        self.plot.setCursor(QtCore.Qt.CrossCursor if self.draw_mode else QtCore.Qt.ArrowCursor)
+        self._set_cursor()
         if self.draw_mode:
             self.log.appendPlainText("Trend line: click start and end (right click/Esc cancels)")
+
+    def toggle_text(self, on: bool | None = None):
+        self.text_mode = (not self.text_mode) if on is None else bool(on)
+        if self.text_mode:
+            self.toggle_draw(False)
+        self.text_btn.setChecked(self.text_mode)
+        self._set_cursor()
+        if self.text_mode:
+            self.log.appendPlainText("Text: click the position in the chart (right click/Esc cancels)")
+
+    def _set_cursor(self):
+        crosshair = self.draw_mode or self.text_mode
+        self.plot.setCursor(QtCore.Qt.CrossCursor if crosshair else QtCore.Qt.ArrowCursor)
+
+    def _ask_text(self, default: str = "") -> str | None:
+        """Text input (multi-line); None = cancelled."""
+        text, ok = QtWidgets.QInputDialog.getMultiLineText(self, "Text", "Text in the chart:", default)
+        return text.strip() if ok else None
+
+    def add_text(self, x: float, y: float, text: str) -> TextNote | None:
+        if not text:
+            return None
+        note = TextNote(self.plot, x, y, text)
+        self._add_drawing(note)
+        self.log.appendPlainText(f"{note.describe()} at {y} (bar {int(x)})")
+        return note
+
+    def edit_text(self, note: TextNote):
+        text = self._ask_text(note.text)
+        if text is None:
+            return
+        if text:
+            note.set_text(text)
+        else:                                   # emptied: delete
+            note.remove(); self.drawings.remove(note); self.selected = None
 
     def _view_point(self, scene_pos) -> tuple[float, float]:
         """Scene -> (bar index rounded, price rounded to tick)."""
@@ -548,56 +658,59 @@ class ChartTrader(QtWidgets.QMainWindow):
         if (x1, y1) == (x2, y2):
             return None
         line = TrendLine(self.plot, x1, y1, x2, y2)
-        self.trendlines.append(line)
-        self.select_line(line)
-        self._update_trendlines()
+        self._add_drawing(line)
         self.log.appendPlainText(f"Trend line {y1} -> {y2} (bars {int(x1)}..{int(x2)})")
         return line
 
-    def select_line(self, line: TrendLine | None):
-        for tl in self.trendlines:
-            tl.set_selected(tl is line)
-        self.selected_line = line
+    def _add_drawing(self, d):
+        self.drawings.append(d)
+        self.select(d)
+        self._update_drawings()
 
-    def copy_trendline(self, line: TrendLine, offset_y: float = 0.0) -> TrendLine:
-        """Copy of the line (optionally offset by offset_y), the copy is selected."""
-        new = TrendLine(self.plot, line.x1, line.y1 + offset_y, line.x2, line.y2 + offset_y)
-        self.trendlines.append(new)
-        self.select_line(new)
-        self._update_trendlines()
+    def select(self, d):
+        for it in self.drawings:
+            it.set_selected(it is d)
+        self.selected = d
+
+    def copy_drawing(self, d, offset_y: float = 0.0):
+        """Copy of a trend line or text (optionally offset by offset_y), the copy is selected."""
+        new = d.clone(offset_y)
+        self._add_drawing(new)
         return new
 
     def copy_selected(self):
-        if self.selected_line is None:
-            self.log.appendPlainText("No trend line selected (click one first)."); return
+        if self.selected is None:
+            self.log.appendPlainText("Nothing selected (click a trend line or text first)."); return
         lo, hi = self.plot.plotItem.vb.viewRange()[1]
         off = -round(round((hi - lo) * 0.05 / self.inc) * self.inc, 10)   # 5 % of view height lower
-        self.copy_trendline(self.selected_line, off)
-        self.log.appendPlainText("Trend line copied (copy is selected, drag to move).")
+        if isinstance(self.selected, TextNote):
+            QtWidgets.QApplication.clipboard().setText(self.selected.text)   # also usable outside the app
+        self.copy_drawing(self.selected, off)
+        self.log.appendPlainText(f"{self.selected.describe()} copied (copy is selected, drag to move).")
 
-    def remove_trendlines(self, all_lines: bool = False):
-        """Del: selected line, else the last one; Shift+Del: all."""
-        if all_lines:
-            victims = list(self.trendlines)
-        elif self.selected_line is not None:
-            victims = [self.selected_line]
+    def remove_drawings(self, all_items: bool = False):
+        """Del: selected drawing, else the last one; Shift+Del: all."""
+        if all_items:
+            victims = list(self.drawings)
+        elif self.selected is not None:
+            victims = [self.selected]
         else:
-            victims = self.trendlines[-1:]
-        for tl in victims:
-            tl.remove(); self.trendlines.remove(tl)
-        self.selected_line = None
+            victims = self.drawings[-1:]
+        for d in victims:
+            d.remove(); self.drawings.remove(d)
+        self.selected = None
 
-    def _update_trendlines(self):
+    def _update_drawings(self):
         right = self.plot.plotItem.vb.viewRange()[0][1]
-        for tl in self.trendlines:
-            tl.update(right)
+        for d in self.drawings:
+            d.update(right)
 
-    def _hit_trendline(self, scene_pos):
+    def _hit_drawing(self, scene_pos):
         right = self.plot.plotItem.vb.viewRange()[0][1]
-        for tl in reversed(self.trendlines):          # topmost (newest) first
-            h = tl.hit(scene_pos, right)
+        for d in reversed(self.drawings):             # topmost (newest) first
+            h = d.hit(scene_pos, right)
             if h:
-                return tl, h
+                return d, h
         return None
 
     def _hit_order(self, scene_pos, tol_px: float = 6.0):
@@ -641,29 +754,24 @@ class ChartTrader(QtWidgets.QMainWindow):
             self._drag_order(ev)
             ev.accept(); return True
         if ev.isStart():
-            hit = self._hit_trendline(ev.buttonDownScenePos())
+            hit = self._hit_drawing(ev.buttonDownScenePos())
             if hit is None:
                 return False
-            line, handle = hit
+            d, handle = hit
             if ev.modifiers() & QtCore.Qt.ShiftModifier:
-                line, handle = self.copy_trendline(line), "body"
-            self.select_line(line)
+                d, handle = self.copy_drawing(d), "body"
+            self.select(d)
             p0 = vb.mapSceneToView(ev.buttonDownScenePos())
-            self._drag = (line, handle, (line.x1, line.y1, line.x2, line.y2), (p0.x(), p0.y()))
+            self._drag = (d, handle, d.coords(), (p0.x(), p0.y()))
             ev.accept(); return True
         if self._drag is None:
             return False
-        line, handle, (x1, y1, x2, y2), (px0, py0) = self._drag
+        d, handle, orig, (px0, py0) = self._drag
         p = vb.mapSceneToView(ev.scenePos())
         dx = float(round(p.x() - px0))
         dy = round(round((p.y() - py0) / self.inc) * self.inc, 10)
-        if handle == "p1":
-            line.x1, line.y1 = x1 + dx, y1 + dy
-        elif handle == "p2":
-            line.x2, line.y2 = x2 + dx, y2 + dy
-        else:
-            line.x1, line.y1, line.x2, line.y2 = x1 + dx, y1 + dy, x2 + dx, y2 + dy
-        self._update_trendlines()
+        d.drag_to(orig, handle, dx, dy)
+        self._update_drawings()
         if ev.isFinish():
             self._drag = None
         ev.accept(); return True
@@ -682,11 +790,23 @@ class ChartTrader(QtWidgets.QMainWindow):
             elif ev.button() == QtCore.Qt.RightButton:
                 self.toggle_draw(False)
             return
+        if self.text_mode:
+            if ev.button() == QtCore.Qt.LeftButton:
+                x, y = self._view_point(ev.scenePos())
+                self.toggle_text(False)       # one text per activation, like the trend line
+                text = self._ask_text()
+                if text:
+                    self.add_text(x, y, text)
+            elif ev.button() == QtCore.Qt.RightButton:
+                self.toggle_text(False)
+            return
         # Outside draw mode, clicks in the chart deliberately trigger no orders:
         # trades only via buttons and hotkeys, so no misclick places an order.
         if ev.button() == QtCore.Qt.LeftButton:
-            hit = self._hit_trendline(ev.scenePos())
-            self.select_line(hit[0] if hit else None)
+            hit = self._hit_drawing(ev.scenePos())
+            self.select(hit[0] if hit else None)
+            if hit and ev.double() and isinstance(hit[0], TextNote):
+                self.edit_text(hit[0])       # double click: edit the text (empty = delete)
 
     def eventFilter(self, obj, ev):
         # Hotkeys before pyqtgraph: after a click into the chart the ViewBox is the scene's focus item
@@ -714,8 +834,10 @@ class ChartTrader(QtWidgets.QMainWindow):
         elif k == QtCore.Qt.Key_F: self.flatten()
         elif k == QtCore.Qt.Key_R: self.reset_y()
         elif k == QtCore.Qt.Key_T: self.toggle_draw()
-        elif k == QtCore.Qt.Key_Escape and self.draw_mode: self.toggle_draw(False)
-        elif k == QtCore.Qt.Key_Delete: self.remove_trendlines(all_lines=shift)
+        elif k == QtCore.Qt.Key_A and not ctrl: self.toggle_text()
+        elif k == QtCore.Qt.Key_Escape and (self.draw_mode or self.text_mode):
+            self.toggle_draw(False); self.toggle_text(False)
+        elif k == QtCore.Qt.Key_Delete: self.remove_drawings(all_items=shift)
         elif k == QtCore.Qt.Key_C and ctrl: self.copy_selected()
         elif sn and k == QtCore.Qt.Key_W and not ctrl: self.sniper_action(lambda: sn.arm_smart(True))
         elif sn and k == QtCore.Qt.Key_S: self.sniper_action(lambda: sn.arm_smart(False))
@@ -861,7 +983,7 @@ class ChartTrader(QtWidgets.QMainWindow):
         right = (n - 1) + self.view_bars * RIGHT_MARGIN     # newest bar at 90 % of the width, also at startup
         self.plot.setXRange(right - self.view_bars, right, padding=0)
         self._follow_price()
-        self._update_trendlines()
+        self._update_drawings()
         self._refresh_marks(n, start)     # after setXRange: needs the current view range
         self.last_line.setPos(self.engine.last_price)
         self.scatter.setData(
