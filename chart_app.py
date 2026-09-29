@@ -902,6 +902,8 @@ def main():
                 print(f"Context (previous day): {len(context_ticks)} ticks from {ctx_path}")
             except ValueError as e:
                 print(f"No previous-day context: {e}")
+        else:
+            print("No previous-day context: no file found (EMA starts with the first bar of the day)")
     else:
         from nautilus_trader.test_kit.providers import TestInstrumentProvider
         instrument = TestInstrumentProvider.es_future(2025, 12)
