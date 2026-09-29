@@ -51,6 +51,10 @@ bewusste Architekturentscheidung – keine eigene Fill-Simulation bauen.
   Ziel nur durch den Aggregator, dann `engine.skip_to`. EMA (`--ema`, Cache `_ema` je Aggregator)
   und Körperbreite (`--bar-width`, Feld "Breite") sind Anzeigeoptionen.
 - `fetch_databento.py` – Kosten abfragen, dann Trades + Definition laden.
+- `trade_journal.py` – Trade-Log `journal/trade_log.csv` (`--journal`), eine Zeile je Position flat→flat
+  aus `PositionClosed`-Events. **NETTING verwendet die Position-ID wieder, `cache.positions_closed()` hält
+  nur die letzte** – daher kommen Journal und `state().realized` (`realized_closed`) aus den Events.
+  Setup-Name über die öffnende Order: GUI-Tags (`_order_tags`) oder Sniper-Trade (`label` + ATM).
 - `export_bars.py` – Bars als CSV wie NTs Indikator `TickBarsExporter.cs` (Dateiname
   `Bar_Export_ESMAR25_2000 - Tick_<Datum>.csv`, Zeit = letzter Tick in Berlin, Dezimalkomma, BOM, CRLF,
   nur anhängen). Streamt Vortagsdateien + Tage, Session-Ende ohne Folge-Tick via `agg.end_session()`.
@@ -119,11 +123,10 @@ Quelle: Vergleich Databento MBO (ESU6, Session 13.8.2026) gegen NTs eigenen Tick
   geschrieben und ist erst nach Ende des Playbacks stabil.
 
 ## Nächste Schritte (in dieser Reihenfolge sinnvoll)
-1. Trade-Journal als CSV (Zeit, Seite, Menge, Entry, Exit, PnL, Dauer) aus Nautilus-Positions.
-2. RTH/ETH-Sessionfilter und optional "Handelsfenster 15:00–17:30" als Sichtbarkeitsmarkierung.
-3. Range-Größe zur Laufzeit umschaltbar (Aggregator neu aufbauen aus bereits gespielten Ticks).
-4. `FillModel` konfigurierbar machen (Queue-Position / Slippage) statt reinem Trade-Through.
-5. Performance: Millionen Ticks → Ladezeit/RAM; Tages- oder Sessionweise laden.
+1. RTH/ETH-Sessionfilter und optional "Handelsfenster 15:00–17:30" als Sichtbarkeitsmarkierung.
+2. Range-Größe zur Laufzeit umschaltbar (Aggregator neu aufbauen aus bereits gespielten Ticks).
+3. `FillModel` konfigurierbar machen (Queue-Position / Slippage) statt reinem Trade-Through.
+4. Performance: Millionen Ticks → Ladezeit/RAM; Tages- oder Sessionweise laden.
 
 ## Konventionen
 - Keine Browser-Storage-APIs, keine externen Chart-Libs; pyqtgraph bleibt.

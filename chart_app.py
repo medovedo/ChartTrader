@@ -268,11 +268,12 @@ class ChartViewBox(pg.ViewBox):
 
 class ChartTrader(QtWidgets.QMainWindow):
     def __init__(self, instrument, ticks, bars="range:4", ticks_per_step=25, sniper_config=None,
-                 bar_width_pct: float = BAR_WIDTH_PCT, ema_period: int = EMA_PERIOD, context_ticks=None):
+                 bar_width_pct: float = BAR_WIDTH_PCT, ema_period: int = EMA_PERIOD, context_ticks=None,
+                 journal_path: str | None = None):
         super().__init__()
         self.inc = float(instrument.price_increment)
         self.engine = ReplayEngine(instrument, ticks, agg=make_aggregator(bars, self.inc),
-                                   sniper_config=sniper_config)
+                                   sniper_config=sniper_config, journal_path=journal_path)
         self.context_ticks = list(context_ticks or [])   # previous day: only for bars/EMA, not through the engine
         self.ema_period = ema_period
         self._ema: list[float] = []
@@ -916,6 +917,8 @@ def main():
     ap.add_argument("--ema", type=int, default=EMA_PERIOD, help="EMA period on bar closes, 0 = off (default 21)")
     ap.add_argument("--context", help="DBN file of the previous day, only as candle context (automatic with --day)")
     ap.add_argument("--list", action="store_true", help="Show contracts per file and exit")
+    ap.add_argument("--journal", default="journal/trade_log.csv",
+                    help="trade log CSV, one row per closed trade (appended; 'off' = none; never for synthetic data)")
     args = ap.parse_args()
 
     from data_loader import day_file, previous_day_files
@@ -967,7 +970,8 @@ def main():
     if args.atm:
         cfg.atm_templates = tuple(a.strip() for a in args.atm.split(",") if a.strip())
     w = ChartTrader(instrument, ticks, bars=args.bars, sniper_config=cfg, bar_width_pct=args.bar_width,
-                    ema_period=args.ema, context_ticks=context_ticks)
+                    ema_period=args.ema, context_ticks=context_ticks,
+                    journal_path=args.journal if args.trades and args.journal != "off" else None)
     w.showMaximized()   # fixed 1600x850 didn't fit on 2560 px at 125 % Windows scaling
     sys.exit(app.exec())
 

@@ -23,6 +23,7 @@ from nautilus_trader.trading.strategy import Strategy, StrategyConfig
 
 from range_bars import RangeBarAggregator
 from sniper import OrderView, Sniper, SniperConfig
+from trade_journal import TradeJournal
 
 
 class ManualStrategyConfig(StrategyConfig, frozen=True):
@@ -39,6 +40,10 @@ class ManualStrategy(Strategy):
         self.agg = None                 # set by ReplayEngine
         self.sniper: Sniper | None = None
         self._manual_moves: set[ClientOrderId] = set()   # GUI moves waiting for exchange confirmation
+        self.journal = None                 # TradeJournal, set by ReplayEngine (optional)
+        self._order_tags: dict[ClientOrderId, str] = {}  # entry order -> setup name for the journal
+        self._position_setup = "Manual"
+        self.realized_closed = 0.0          # sum over all closed positions (the cache keeps only the last one)
 
     def on_start(self):
         self.instrument = self.cache.instrument(InstrumentId.from_str(self.config.instrument_id))
@@ -68,9 +73,27 @@ class ManualStrategy(Strategy):
             if self.sniper is not None and px is not None:
                 self.sniper.on_manual_move(event.client_order_id, float(px))
 
+    def on_position_opened(self, event):
+        self._position_setup = self._setup_of(event.opening_order_id)
+
     def on_position_closed(self, event):
+        self.realized_closed += float(event.realized_pnl)
         if self.sniper is not None:
             self.sniper.on_position_closed(float(event.realized_pnl))
+        if self.journal is not None:
+            r = self.journal.record(event, self._position_setup)
+            self.events.append(f"JOURNAL {r['Side']} {r['Qty']} {r['Entry']} -> {r['Exit']}  "
+                               f"{r['Ticks']} ticks  PnL {r['PnL']}  ({r['Setup']})")
+
+    def _setup_of(self, oid: ClientOrderId) -> str:
+        """Origin of the order that opened the position: GUI tag or Sniper setup + ATM template."""
+        if oid in self._order_tags:
+            return self._order_tags[oid]
+        if self.sniper is not None:
+            for t in self.sniper.trades:
+                if any(br.entry == oid for br in t.brackets):
+                    return f"{t.label} {t.template.name}"
+        return "Manual"
 
     # --- Calls from the GUI --------------------------------------------------
     def market(self, side: OrderSide, qty: int):
@@ -79,6 +102,7 @@ class ManualStrategy(Strategy):
             order_side=side,
             quantity=Quantity.from_int(qty),
         )
+        self._order_tags[order.client_order_id] = "Manual Market"
         self.submit_order(order)
 
     def limit(self, side: OrderSide, qty: int, price: float):
@@ -116,6 +140,8 @@ class ManualStrategy(Strategy):
             tp_post_only=False,
             time_in_force=TimeInForce.GTC,
         )
+        entry = next(o for o in orders.orders if o.parent_order_id is None)
+        self._order_tags[entry.client_order_id] = "Manual Bracket"
         self.submit_order_list(orders)
 
     def flatten(self):
@@ -209,7 +235,8 @@ class ReplayState:
 class ReplayEngine:
     def __init__(self, instrument: Instrument, ticks: list[TradeTick],
                  starting_balance: float = 50_000.0, agg=None,
-                 sniper_config: SniperConfig | None = None, enable_sniper: bool = True):
+                 sniper_config: SniperConfig | None = None, enable_sniper: bool = True,
+                 journal_path: str | None = None):
         self.instrument = instrument
         self.ticks = ticks
         self.i = 0
@@ -232,6 +259,8 @@ class ReplayEngine:
         self.strategy.agg = agg if agg is not None else RangeBarAggregator(tick_size=tick_size, range_ticks=4)
         if enable_sniper:
             self.strategy.sniper = Sniper(self.strategy, tick_size, sniper_config)
+        if journal_path:
+            self.strategy.journal = TradeJournal(journal_path, tick_size)
         self.engine.add_strategy(self.strategy)
         self.last_price = float(ticks[0].price) if ticks else 0.0
         self.ts = ticks[0].ts_event if ticks else 0
@@ -289,7 +318,8 @@ class ReplayEngine:
         for pos in cache.positions_open(instrument_id=iid):
             net += float(pos.signed_qty)
             unreal += float(pos.unrealized_pnl(Price(self.last_price, self.instrument.price_precision)))
-        realized = sum(float(p.realized_pnl) for p in cache.positions_closed(instrument_id=iid))
+        # NETTING reuses the position ID, so positions_closed() only holds the last one: closed PnL comes from the events
+        realized = self.strategy.realized_closed
         realized += sum(float(p.realized_pnl) for p in cache.positions_open(instrument_id=iid))
         orders = []
         for o in cache.orders_open(instrument_id=iid):

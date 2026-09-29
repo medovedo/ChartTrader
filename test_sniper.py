@@ -7,6 +7,8 @@ can be checked deterministically. Usage: python test_sniper.py
 from __future__ import annotations
 
 import sys
+import tempfile
+from pathlib import Path
 
 from nautilus_trader.model.data import TradeTick
 from nautilus_trader.model.enums import AggressorSide
@@ -68,10 +70,11 @@ FLAT = [103.50] * 10
 
 
 class Harness:
-    def __init__(self, prices, cfg=None):
+    def __init__(self, prices, cfg=None, journal=None):
         self.inst = es_contract()
         self.ticks = ticks_from(self.inst, prices)
-        self.eng = ReplayEngine(self.inst, self.ticks, agg=TickBarAggregator(tick_size=0.25, ticks_per_bar=10), sniper_config=cfg)
+        self.eng = ReplayEngine(self.inst, self.ticks, agg=TickBarAggregator(tick_size=0.25, ticks_per_bar=10),
+                                sniper_config=cfg, journal_path=journal)
         self.sn = self.eng.sniper
         self.strat = self.eng.strategy
 
@@ -133,7 +136,9 @@ def main() -> int:
     check((m.trigger, m.limit, m.stop) == (100.75, 100.25, 103.25), f"Momentum Short: {m}")
 
     # ---------- 2. Smart Long: fill, structural stop, T1, Auto-BE, trail, runner exit ----------
-    h = Harness(BAR_A + BAR_B + BAR_C + BAR_D + BAR_D2 + BAR_E + BAR_F + BAR_G + BAR_H + FLAT)
+    tmp = tempfile.TemporaryDirectory()
+    h = Harness(BAR_A + BAR_B + BAR_C + BAR_D + BAR_D2 + BAR_E + BAR_F + BAR_G + BAR_H + FLAT,
+                journal=str(Path(tmp.name) / "trade_log.csv"))
     h.run_to(22)                                    # bar C forming, 2 ticks in
     check(h.sn.arm_smart(True), "Smart Long armed")
     tr = h.sn.trap
@@ -170,6 +175,11 @@ def main() -> int:
     check(h.net() == 0 and not h.sn.trades and not st.open_orders, f"Runner stopped out, trade finished, open={st.open_orders}")
     check(abs(st.realized - 375.0) < 1e-6, f"Realized PnL {st.realized:.2f} (expected 375.00)")
     check(not h.sn.locked, "Winning trade: no lockout")
+    rows = h.strat.journal.rows
+    check(len(rows) == 1 and rows[0]["Setup"] == "Smart Long WADES12" and rows[0]["Qty"] == "3"
+          and rows[0]["Entry"] == "102,25" and rows[0]["PnL"] == "375",
+          f"Journal: one row for the ATM trade: {rows}")
+    tmp.cleanup()
 
     # ---------- 2b. Same path without auto-BE: trail still starts after Target1 (as in the original) ----------
     h = Harness(BAR_A + BAR_B + BAR_C + BAR_D + BAR_D2 + BAR_E + BAR_F + BAR_G + BAR_H + FLAT,

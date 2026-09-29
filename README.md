@@ -15,6 +15,7 @@ SimulatedExchange (streaming backtest), not from custom logic.
 | `fetch_databento.py` | Query cost, download trades + definition |
 | `export_nt8.py` | Databento ticks → NinjaTrader 8 import file |
 | `export_bars.py` | Bars → CSV files like NT's TickBarsExporter indicator |
+| `trade_journal.py` | Trade log: one CSV row per closed trade |
 | `chart_app.py` | PySide6/pyqtgraph UI |
 
 ## Installation
@@ -115,6 +116,14 @@ candles from the previous day up to the jump target. For file paths, pass `--con
 Context ticks only go through the aggregator, not through the engine.
 Playback constants (speed factors, idle-gap shortening, drawing window) are at the top of `chart_app.py`.
 
+**Trade log**: every closed trade is appended to `journal/trade_log.csv` (`--journal PATH`, `--journal off`;
+not written for synthetic data). One row per position from flat to flat, so an ATM trade with Target1
+and runner is one row with the average exit. Columns: `Replayed` (wall-clock time of the replay run),
+`Date`, `Open`, `Close` (Europe/Berlin), `Instrument`, `Setup` (`Manual Market`, `Manual Bracket` or the
+Sniper setup with ATM template, e.g. `Smart Short WADES16`), `Side`, `Qty`, `Entry`, `Exit`, `Points`,
+`Ticks`, `PnL` ($), `Duration`. Excel format for a German system: `;` separator, decimal comma, UTF-8 with BOM.
+The log below the chart shows a `JOURNAL` line for each trade.
+
 ## Controls
 | Key / mouse | Action |
 |---|---|
@@ -169,5 +178,4 @@ Parameters: `SniperConfig` in `sniper.py` (defaults as in the NT strategy).
   test-kit ES is used; always load the definition for real $ values.
 - Fills are "trade-through": limits fill as soon as a trade reaches the price,
   without queue position. For more conservative assumptions, set a `FillModel` in `ReplayEngine`.
-- No session filters (RTH/ETH), no saving of trades. Next steps:
-  trade journal as CSV, session filter, multiple range sizes.
+- No session filters (RTH/ETH). Next steps: session filter, multiple range sizes.

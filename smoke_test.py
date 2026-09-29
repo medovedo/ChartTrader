@@ -7,6 +7,8 @@ backward jump is ignored. Usage: python smoke_test.py
 from __future__ import annotations
 
 import sys
+import tempfile
+from pathlib import Path
 
 from nautilus_trader.model.enums import OrderSide
 
@@ -48,7 +50,9 @@ def reachable_price(engine: ReplayEngine, above: bool, lookahead: int = 5000, ti
 def main() -> int:
     instrument = es_contract()
     ticks = synthetic(instrument, n=20_000)
-    engine = ReplayEngine(instrument, ticks, enable_sniper=False)   # pure engine test
+    tmp = tempfile.TemporaryDirectory()
+    journal = Path(tmp.name) / "trade_log.csv"
+    engine = ReplayEngine(instrument, ticks, enable_sniper=False, journal_path=str(journal))   # pure engine test
     strat = engine.strategy
     inc = float(instrument.price_increment)
 
@@ -131,7 +135,22 @@ def main() -> int:
     engine.skip_to(here - 1000)
     check(engine.i == here, f"skip_to backward ignored: i={engine.i}")
 
+    # --- 8. Trade journal: one row per closed position, matches the realized PnL ---
+    lines = journal.read_text(encoding="utf-8-sig").splitlines()
+    rows = [dict(zip(lines[0].split(";"), ln.split(";"))) for ln in lines[1:]]
+    check(len(rows) == 4, f"Journal: 4 closed trades (market+limit, bracket, 2x flatten), got {len(rows)}")
+    setups = [r["Setup"] for r in rows]
+    check(setups == ["Manual Market", "Manual Bracket", "Manual Market", "Manual Market"], f"Journal setups: {setups}")
+    total = sum(float(r["PnL"].replace(",", ".")) for r in rows)
+    check(abs(total - engine.state().realized) < 0.01, f"Journal PnL sum {total:.2f} = realized {engine.state().realized:.2f}")
+    r = rows[1]
+    pts = (float(r["Exit"].replace(",", ".")) - float(r["Entry"].replace(",", "."))) * (1 if r["Side"] == "LONG" else -1)
+    check(abs(pts * 50 * float(r["Qty"]) - float(r["PnL"].replace(",", "."))) < 0.01,
+          f"Journal row consistent: {r['Side']} {r['Qty']} {r['Entry']} -> {r['Exit']} = {r['PnL']}")
+    print("Journal:", *lines, sep="\n  ")
+
     engine.end()
+    tmp.cleanup()
     print()
     print("Events:", *strat.events, sep="\n  ")
     print()
