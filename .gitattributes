@@ -1,0 +1,7 @@
+# Textdateien immer mit LF, unabhaengig von core.autocrlf
+* text=auto eol=lf
+
+# Binaerdaten nie anfassen
+*.dbn binary
+*.zst binary
+*.png binary
