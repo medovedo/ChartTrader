@@ -38,6 +38,7 @@ class ManualStrategy(Strategy):
         self.events: list[str] = []
         self.agg = None                 # set by ReplayEngine
         self.sniper: Sniper | None = None
+        self._manual_moves: set[ClientOrderId] = set()   # GUI moves waiting for exchange confirmation
 
     def on_start(self):
         self.instrument = self.cache.instrument(InstrumentId.from_str(self.config.instrument_id))
@@ -56,7 +57,16 @@ class ManualStrategy(Strategy):
         self.events.append(f"REJECTED {event.reason}")
 
     def on_order_modify_rejected(self, event):
+        self._manual_moves.discard(event.client_order_id)
         self.events.append(f"MODIFY REJECTED {event.reason}")
+
+    def on_order_updated(self, event):
+        # Manual move confirmed by the exchange: only now tell the Sniper (a rejected move must not count)
+        if event.client_order_id in self._manual_moves:
+            self._manual_moves.discard(event.client_order_id)
+            px = event.trigger_price if event.trigger_price is not None else event.price
+            if self.sniper is not None and px is not None:
+                self.sniper.on_manual_move(event.client_order_id, float(px))
 
     def on_position_closed(self, event):
         if self.sniper is not None:
@@ -180,8 +190,7 @@ class ManualStrategy(Strategy):
             self.modify(oid, trigger_price=price)
         else:
             self.modify(oid, price=price)
-        if self.sniper is not None:
-            self.sniper.on_manual_move(oid, price)
+        self._manual_moves.add(oid)      # Sniper is notified in on_order_updated
 
     def log(self, msg: str) -> None:
         self.events.append(msg)

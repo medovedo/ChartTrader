@@ -178,6 +178,10 @@ def main() -> int:
     t = h.sn.trades[0]
     check(t.t1_filled and not t.be_triggered and h.views(t)[1][1].trigger_price == 99.75,
           f"No auto-BE: Stop2 stays at structural stop after Target1: {h.views(t)[1][1].trigger_price}")
+    h.strat.move_order(t.brackets[1].sl, 106.00)    # sell stop above the market -> rejected
+    h.run_to(38)
+    check(h.views(t)[1][1].trigger_price == 99.75 and t.current_runner_stop == 99.75,
+          f"Rejected manual move does not reach the Sniper: stop2 {t.current_runner_stop}")
     h.run_to(81)
     check(h.views(t)[1][1].trigger_price == 103.75, f"Trail without auto-BE: Stop2 at 103.75: {h.views(t)[1][1].trigger_price}")
 
