@@ -657,7 +657,7 @@ class ChartTrader(QtWidgets.QMainWindow):
             return None
         note = TextNote(self.plot, x, y, text)
         self._add_drawing(note)
-        self.log.appendPlainText(f"{note.describe()} at {y} (bar {int(x)})")
+        self.log.appendPlainText(f"{note.describe()} at {y} (bar {self._bar_no(x)})")
         return note
 
     def edit_text(self, note: TextNote):
@@ -692,6 +692,17 @@ class ChartTrader(QtWidgets.QMainWindow):
         b = bars[i] if i < len(bars) else self.agg.current
         tol = abs(vb.mapSceneToView(scene_pos + QtCore.QPointF(0, tol_px)).y() - pt.y())
         return i if b.low - tol <= pt.y() <= b.high + tol else None
+
+    def _bar_no(self, x: float) -> int:
+        """Session bar number as labelled in the chart (x = internal index); right of the running bar
+        it is counted on from the last bar."""
+        i = int(round(x))
+        no = self.agg.number_of(i)
+        if no is not None:
+            return no
+        n = len(self.agg.bars) + (1 if self.agg.current is not None else 0)
+        last = self.agg.number_of(n - 1) if n else None
+        return last + (i - (n - 1)) if last is not None and i >= n else i
 
     def _bar_text(self, i: int) -> str:
         agg = self.agg
@@ -753,7 +764,7 @@ class ChartTrader(QtWidgets.QMainWindow):
             return None
         line = TrendLine(self.plot, x1, y1, x2, y2)
         self._add_drawing(line)
-        self.log.appendPlainText(f"Trend line {y1} -> {y2} (bars {int(x1)}..{int(x2)})")
+        self.log.appendPlainText(f"Trend line {y1} -> {y2} (bars {self._bar_no(x1)}..{self._bar_no(x2)})")
         return line
 
     def _add_drawing(self, d):
