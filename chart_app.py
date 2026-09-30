@@ -460,7 +460,9 @@ class ChartTrader(QtWidgets.QMainWindow):
         self.timer = QtCore.QTimer(self); self.timer.timeout.connect(self.step)
         self.plot.scene().sigMouseClicked.connect(self.on_click)
         self.plot.scene().sigMouseMoved.connect(self.on_move)
-        self.plot.installEventFilter(self)   # hotkeys take precedence over pyqtgraph's own keys
+        self.plot.installEventFilter(self)   # mouse leaving the chart
+        QtWidgets.QApplication.instance().installEventFilter(self)   # hotkeys wherever the focus is (see eventFilter)
+        QtCore.QTimer.singleShot(0, self.plot.setFocus)   # at start the keyboard belongs to the chart, not the qty field
         self._feed_context(self.context_ticks)   # previous day as candles before the first replay bar
         self._play(self.ticks_per_step)  # create first bar
         self._sync_clock(); self._drain_events(); self.refresh()
@@ -912,15 +914,25 @@ class ChartTrader(QtWidgets.QMainWindow):
                 self.edit_text(hit[0])       # double click: edit the text (empty = delete)
 
     def eventFilter(self, obj, ev):
-        # Hotkeys before pyqtgraph: after a click into the chart the ViewBox is the scene's focus item
-        # and takes +/- for its zoom history, the QGraphicsView takes arrow keys for scrolling.
-        if obj is self.plot and ev.type() == QtCore.QEvent.KeyPress and self._handle_key(ev):
+        # Hotkeys before the focus widget (application-wide filter): in the chart the ViewBox takes +/-
+        # for its zoom history and the QGraphicsView the arrow keys for scrolling; a focused button
+        # moves the focus on arrow keys and clicks on Space, a combo box switches its entry. Only
+        # text inputs (quantity/ticks fields, date) keep their keys; what they don't use reaches
+        # keyPressEvent. Dialogs and popups are other windows and are left alone.
+        if (ev.type() == QtCore.QEvent.KeyPress and isinstance(obj, QtWidgets.QWidget)
+                and obj.window() is self and not self._is_text_input(obj) and self._handle_key(ev)):
             return True
         if obj is self.plot and ev.type() == QtCore.QEvent.Leave:
             self.cursor_line.setVisible(False)      # mouse left the chart
             self._hover_pos = None
             self.bar_box.setVisible(False)
         return super().eventFilter(obj, ev)
+
+    @staticmethod
+    def _is_text_input(w) -> bool:
+        if isinstance(w, (QtWidgets.QPlainTextEdit, QtWidgets.QTextEdit)):
+            return not w.isReadOnly()        # the read-only log is no input
+        return isinstance(w, (QtWidgets.QLineEdit, QtWidgets.QAbstractSpinBox))   # spin/date boxes and their line edit
 
     def keyPressEvent(self, e):
         if not self._handle_key(e):

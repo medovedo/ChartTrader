@@ -46,8 +46,10 @@ bewusste Architekturentscheidung – keine eigene Fill-Simulation bauen.
   Wiedergabe ist zeitgetreu: simulierte Uhr `sim_ns` in Datenzeit, Timer alle `FRAME_MS`,
   pro Aufruf werden alle Ticks mit `ts_event <= sim_ns` gespielt (bisect auf `ts_index`).
   Faktor aus `SPEEDS` (Pfeil rechts/links), Pausen > `MAX_IDLE_NS` werden gekürzt. Hotkeys laufen über
-  `_handle_key` und einen Event-Filter am PlotWidget: nach einem Klick in den Chart ist die ViewBox
-  Fokus-Item und schluckt sonst +/-/= (pyqtgraph-Zoom-Historie), die QGraphicsView die Pfeiltasten. Nach N, Sprung und Pause
+  `_handle_key` und einen anwendungsweiten Event-Filter (vor dem Fokus-Widget): sonst schluckt die ViewBox
+  +/-/= (pyqtgraph-Zoom-Historie), die QGraphicsView die Pfeiltasten, ein Button Pfeile/Leertaste, die
+  Combobox Pfeile. Ausgenommen nur Texteingaben (`_is_text_input`: Spinboxen, Datum, LineEdit); Dialoge
+  sind eigene Fenster. Startfokus liegt auf dem Chart. Nach N, Sprung und Pause
   `_sync_clock()` aufrufen, sonst holt die Uhr nach. "Springe zu" = bisect auf `engine.ts_index`,
   Aggregator zurücksetzen, `context_ticks` (Vortag, via `--day` automatisch) + alle Ticks bis zum
   Ziel nur durch den Aggregator, dann `engine.skip_to`. EMA (`--ema`, Cache `_ema` je Aggregator)
