@@ -15,7 +15,7 @@ Controls
                 mode is off again; right click/Esc cancels. Click selects a line, dragging moves
                 it (at an endpoint: only the point), Shift+drag drags a copy, Ctrl+C copies
                 the selected line, Del deletes it (without selection the last one), Shift+Del all
-  A             Text: click the position, enter the text (multi-line). Select, drag, Shift+drag,
+  A             Text: click the position, enter the text (Enter = OK, Shift+Enter = new line). Select, drag, Shift+drag,
                 Ctrl+C (copy, text also to the clipboard) and Del like trend lines; double click edits
                 (empty text deletes). A jump deletes all drawings (bar indices are rebuilt)
   Ctrl+B/S      Market Buy / Sell (quantity from field)
@@ -340,6 +340,17 @@ class ChartViewBox(pg.ViewBox):
             super().mouseDragEvent(ev, axis)
 
 
+class _EnterAccepts(QtCore.QObject):
+    """Event filter for a text field in a dialog: Enter accepts the dialog, Shift+Enter inserts a line break."""
+
+    def eventFilter(self, obj, ev):
+        if (ev.type() == QtCore.QEvent.KeyPress and ev.key() in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter)
+                and not ev.modifiers() & QtCore.Qt.ShiftModifier):
+            self.parent().accept()
+            return True
+        return False
+
+
 class ChartTrader(QtWidgets.QMainWindow):
     def __init__(self, instrument, ticks, bars="range:4", ticks_per_step=25, sniper_config=None,
                  bar_width_pct: float = BAR_WIDTH_PCT, ema_period: int = EMA_PERIOD, context_ticks=None,
@@ -648,9 +659,16 @@ class ChartTrader(QtWidgets.QMainWindow):
         self.plot.setCursor(QtCore.Qt.CrossCursor if crosshair else QtCore.Qt.ArrowCursor)
 
     def _ask_text(self, default: str = "") -> str | None:
-        """Text input (multi-line); None = cancelled."""
-        text, ok = QtWidgets.QInputDialog.getMultiLineText(self, "Text", "Text in the chart:", default)
-        return text.strip() if ok else None
+        """Text input: Enter accepts, Shift+Enter starts a new line; None = cancelled."""
+        dlg = QtWidgets.QDialog(self); dlg.setWindowTitle("Text")
+        lay = QtWidgets.QVBoxLayout(dlg)
+        lay.addWidget(QtWidgets.QLabel("Text in the chart (Enter = OK, Shift+Enter = new line):"))
+        edit = QtWidgets.QPlainTextEdit(default); lay.addWidget(edit)
+        buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dlg.accept); buttons.rejected.connect(dlg.reject); lay.addWidget(buttons)
+        edit.installEventFilter(_EnterAccepts(dlg))
+        edit.moveCursor(QtGui.QTextCursor.End); edit.setFocus()
+        return edit.toPlainText().strip() if dlg.exec() == QtWidgets.QDialog.Accepted else None
 
     def add_text(self, x: float, y: float, text: str) -> TextNote | None:
         if not text:
