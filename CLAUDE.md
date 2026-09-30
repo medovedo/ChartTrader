@@ -60,6 +60,9 @@ bewusste Architekturentscheidung – keine eigene Fill-Simulation bauen.
   `on_move` und am Ende von `refresh()` (laufende Bar ändert sich ohne Mausbewegung).
   pyqtgraph verwirft Mausbewegungen < ~10 ms nach der vorigen (`_moveEventIsAllowed`): headless Drags
   mit `QTest.qWait(20)` zwischen den `mouseMove`s, sonst kommt kein Drag an.
+- `chart_cli.py` – Parser von `chart_app.py` plus Tab-Vervollständigung (argcomplete). Bewusst ohne
+  schwere Imports: `chart_app.py` ruft `autocomplete()` vor pyqtgraph/Nautilus auf (Tab ~80 ms).
+  Neue Argumente dort eintragen, nicht in `chart_app.py`. `--schema` ohne Angabe: `.trades`, sonst `.mbo`.
 - `fetch_databento.py` – Kosten abfragen, dann Trades + Definition laden.
 - `trade_journal.py` – Trade-Log `journal/trade_log.csv` (`--journal`), eine Zeile je Position flat→flat
   aus `PositionClosed`-Events. **NETTING verwendet die Position-ID wieder, `cache.positions_closed()` hält

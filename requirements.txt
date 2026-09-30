@@ -3,3 +3,4 @@ databento
 pyqtgraph
 PySide6
 pandas
+argcomplete

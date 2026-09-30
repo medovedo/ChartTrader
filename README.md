@@ -18,6 +18,7 @@ SimulatedExchange (streaming backtest), not from custom logic.
 | `trade_journal.py` | Trade log: one CSV row per closed trade |
 | `docs/log_guide.md` | How to read the log messages and the trade log (German, context for trade analysis) |
 | `chart_app.py` | PySide6/pyqtgraph UI |
+| `chart_cli.py` | Command line of `chart_app.py` and its shell tab completion (argcomplete) |
 
 ## Installation
 ```bash
@@ -58,7 +59,8 @@ python chart_app.py TRADES.dbn.zst --bars tick:2000                # tick bars l
 python chart_app.py TRADES.dbn.zst --bars range:6 --atm WADES10,WADES12 --all-buttons
 ```
 Local data is stored per day under `..\trading\databento_data\glbx-mdp3-YYYYMMDD.trades.dbn.zst`
-(`--day` builds the path from it, the folder can be changed with `--data-dir`)
+(`--day` builds the path from it, the folder can be changed with `--data-dir`; without `--schema`
+the `.trades` file is used if it exists, else the `.mbo` file)
 (parent symbology `ES.FUT`, December 2025 to June 2026). These files contain all
 expirations and spreads; without `--symbol` the outright contract with the most ticks is
 chosen. On roll days (the week before the third Friday of Mar/Jun/Sep/Dec) check `--list`
@@ -124,6 +126,21 @@ and runner is one row with the average exit. Columns: `Replayed` (wall-clock tim
 Sniper setup with ATM template, e.g. `Smart Short WADES16`), `Side`, `Qty`, `Entry`, `Exit`, `Points`,
 `Ticks`, `PnL` ($), `Duration`. Excel format for a German system: `;` separator, decimal comma, UTF-8 with BOM.
 The log below the chart shows a `JOURNAL` line for each trade.
+
+### Tab completion (zsh)
+`chart_app.py` completes its arguments via `argcomplete` (in `requirements.txt`): `--day` offers
+the days that have a file in `--data-dir` (only those of `--schema`, if given), `--schema` the
+schemas present for the chosen days, `--symbol` the front and next ES contract of those days
+(derived from the date, roll 8 days before the third Friday), `--atm` the template names (also after
+a comma), `--bars` common bar types, file arguments `*.dbn.zst`. Put `--data-dir` before `--day`
+so the days come from that folder. Activation in `~/.zshrc`, with the venv's tools:
+```zsh
+# ./chart_app.py <Tab>  (script is executable, shebang python3 = active venv)
+eval "$(~/ChartTrader/.venv/bin/register-python-argcomplete --shell zsh chart_app.py)"
+```
+For `python chart_app.py <Tab>` use the global hook once instead (`activate-global-python-argcomplete
+--user`, then follow its note on `fpath`); it completes every script with the `PYTHON_ARGCOMPLETE_OK`
+marker. In both cases the `python3` in `PATH` must be the venv's (activate the venv first).
 
 ## Controls
 | Key / mouse | Action |

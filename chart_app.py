@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+# PYTHON_ARGCOMPLETE_OK
 """Charttrader: range bar chart with manual replay on NautilusTrader.
 
 Controls
@@ -51,6 +53,9 @@ from pathlib import Path
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
+from chart_cli import BAR_WIDTH_PCT, EMA_PERIOD, autocomplete, build_parser, resolve_schema
+autocomplete()   # Tab completion of the shell: answers and exits before the heavy imports below
+
 import pyqtgraph as pg
 from PySide6 import QtCore, QtGui, QtWidgets
 from nautilus_trader.model.enums import OrderSide
@@ -66,11 +71,8 @@ FRAME_MS = 40                              # playback timer interval
 MAX_IDLE_NS = 3_000_000_000                # pauses without trades are shortened to 3 s of data time
 MAX_TICKS_PER_FRAME = 5_000                # safeguard when the machine can't keep up at high factors
 VISIBLE_BARS = 600                         # drawn bars (older ones stay in the aggregator, just not on screen)
-BAR_WIDTH_PCT = 50                         # body width in percent of bar spacing (initial; changeable via field/--bar-width)
-EMA_PERIOD = 21                            # EMA line on bar closes (0 = off)
 VIEW_BARS = 125                            # width of the view window in bars
 RIGHT_MARGIN = 0.10                        # newest bar sits this far (fraction of the window) from the right edge
-DATA_DIR = Path.home() / "Desktop" / "trading" / "databento_data"   # location of the daily files for --day
 
 
 class CandleItem(pg.GraphicsObject):
@@ -1139,30 +1141,11 @@ class ChartTrader(QtWidgets.QMainWindow):
 
 
 def main():
-    import argparse
-    ap = argparse.ArgumentParser(description="Charttrader: tick replay on NautilusTrader")
-    ap.add_argument("trades", nargs="*", help="DBN file(s) with schema 'trades' or 'mbo'; empty = synthetic ticks")
-    ap.add_argument("--day", nargs="+", metavar="YYYY-MM-DD",
-                    help="Trading day(s) as date; file glbx-mdp3-YYYYMMDD.<schema>.dbn.zst from --data-dir")
-    ap.add_argument("--schema", default="trades", choices=["trades", "mbo"],
-                    help="File schema for --day (default trades; mbo = fills as ticks like NinjaTrader)")
-    ap.add_argument("--data-dir", default=str(DATA_DIR), help=f"Folder of the daily files (default {DATA_DIR})")
-    ap.add_argument("--definition", help="DBN definition file (instrument incl. multiplier)")
-    ap.add_argument("--symbol", help="Contract, e.g. ESH6 (default: most ticks)")
-    ap.add_argument("--bars", default="tick:2000",
-                    help="Bar type: range:N (ticks), tick:N (Databento trade records per bar) or vol:N (contracts per bar); "
-                         "default tick:2000. Note: Databento records are not NinjaTrader ticks (see README)")
-    ap.add_argument("--atm", default=None, help="ATM templates, comma-separated (default: WADES12,WADES10,WADES14,WADES16,WADES8,WADES6)")
-    ap.add_argument("--all-buttons", action="store_true", help="Also show Deep and Momentum buttons")
-    ap.add_argument("--bar-width", type=float, default=BAR_WIDTH_PCT, help="Body width in %% of bar spacing (default 50)")
-    ap.add_argument("--ema", type=int, default=EMA_PERIOD, help="EMA period on bar closes, 0 = off (default 21)")
-    ap.add_argument("--context", help="DBN file of the previous day, only as candle context (automatic with --day)")
-    ap.add_argument("--list", action="store_true", help="Show contracts per file and exit")
-    ap.add_argument("--journal", default="journal/trade_log.csv",
-                    help="trade log CSV, one row per closed trade (appended; 'off' = none; never for synthetic data)")
-    args = ap.parse_args()
+    args = build_parser().parse_args()
 
     from data_loader import day_file, previous_day_files
+    if args.day:
+        args.schema = resolve_schema(args.day[0], args.data_dir, args.schema)
     for day in args.day or []:
         path = day_file(day, args.data_dir, args.schema)
         if not path.exists():
