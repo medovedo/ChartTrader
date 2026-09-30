@@ -9,6 +9,7 @@ strategy's tick handler and therefore run tick-accurately in the Nautilus stream
 """
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 
 from nautilus_trader.backtest.engine import BacktestEngine, BacktestEngineConfig
@@ -27,6 +28,9 @@ from nautilus_trader.trading.strategy import Strategy, StrategyConfig
 from range_bars import RangeBarAggregator
 from sniper import OrderView, Sniper, SniperConfig
 from trade_journal import TradeJournal
+
+# Nautilus 1.231 calls pd.Timestamp.utcnow() in BacktestEngine.run (deprecated in pandas 3); not our code
+warnings.filterwarnings("ignore", message=r"Timestamp\.utcnow is deprecated", category=DeprecationWarning)
 
 
 class ManualStrategyConfig(StrategyConfig, frozen=True):
