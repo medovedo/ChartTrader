@@ -1156,9 +1156,10 @@ class ChartTrader(QtWidgets.QMainWindow):
             ln = pg.InfiniteLine(pos=px, angle=0, pen=pg.mkPen(col, width=2 if is_leg else 1),
                                  label=f"{typ} {side} {qty:g} @ {px:.2f}", labelOpts={"position": 0.02, "color": col})
             self.plot.addItem(ln); self.order_lines.append(ln)
-        ts = datetime.fromtimestamp(st.ts / 1e9, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        # Same time zone as the time axis and the bar box (selection next to "Jump to", default Berlin)
+        ts = datetime.fromtimestamp(st.ts / 1e9, tz=ZoneInfo(self.jump_tz.currentText())).strftime("%Y-%m-%d %H:%M:%S %Z")
         self.status.setText(
-            f"{ts} UTC   Last {st.last_price:.2f}   Pos {st.net_qty:+g}   "
+            f"{ts}   Last {st.last_price:.2f}   Pos {st.net_qty:+g}   "
             f"Unreal {st.unrealized:+.2f}   Real {st.realized:+.2f}   "
             f"Speed {self.speed:g}x   Tick {self.engine.i}/{len(self.engine.ticks)}")
         self._update_bar_box()          # after the view update: bars move under a still pointer during playback
