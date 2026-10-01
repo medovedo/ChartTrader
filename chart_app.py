@@ -15,7 +15,8 @@ Controls
                 mode is off again; right click/Esc cancels. Click selects a line, dragging moves
                 it (at an endpoint: only the point), Shift+drag drags a copy, Ctrl+C copies
                 the selected line, Del deletes it (without selection the last one), Shift+Del all
-  A             Text: click the position, enter the text (Enter = OK, Shift+Enter = new line). Select, drag, Shift+drag,
+  A             Text: the dialog opens at once; Enter places the text at the mouse pointer (Shift+Enter =
+                new line, Esc cancels). Select, drag, Shift+drag,
                 Ctrl+C (copy, text also to the clipboard) and Del like trend lines; double click edits
                 (empty text deletes). A jump deletes all drawings (bar indices are rebuilt)
   Ctrl+B/S      Market Buy / Sell (quantity from field)
@@ -417,7 +418,6 @@ class ChartTrader(QtWidgets.QMainWindow):
         self.num_items: dict[int, pg.TextItem] = {}        # bar index -> number label (every 10th bar)
         self.drawings: list[TrendLine | TextNote] = []
         self.selected: TrendLine | TextNote | None = None
-        self.text_mode = False
         self._drag = None               # (line, handle, original coordinates, start point) while dragging
         self._draggable: list[tuple] = []   # bracket legs from the last refresh: (id, price)
         self._order_drag = None         # [id, original price, current price] while dragging an order line
@@ -448,8 +448,8 @@ class ChartTrader(QtWidgets.QMainWindow):
             b = QtWidgets.QPushButton(text); b.clicked.connect(fn); bar.addWidget(b)
         self.draw_btn = QtWidgets.QPushButton("Trend line (T)"); self.draw_btn.setCheckable(True)
         self.draw_btn.clicked.connect(self.toggle_draw); bar.addWidget(self.draw_btn)
-        self.text_btn = QtWidgets.QPushButton("Text (A)"); self.text_btn.setCheckable(True)
-        self.text_btn.clicked.connect(self.toggle_text); bar.addWidget(self.text_btn)
+        self.text_btn = QtWidgets.QPushButton("Text (A)")
+        self.text_btn.clicked.connect(self.new_text); bar.addWidget(self.text_btn)
         self.cursor_btn = QtWidgets.QPushButton("Crosshair (H)"); self.cursor_btn.setCheckable(True)
         self.cursor_btn.setChecked(True)
         self.cursor_btn.clicked.connect(self.toggle_cursor_line); bar.addWidget(self.cursor_btn)
@@ -636,8 +636,6 @@ class ChartTrader(QtWidgets.QMainWindow):
     # --- Drawings: trend lines and text ------------------------------------
     def toggle_draw(self, on: bool | None = None):
         self.draw_mode = (not self.draw_mode) if on is None else bool(on)
-        if self.draw_mode:
-            self.toggle_text(False)
         self.draw_start = None
         self.preview.setData([], [])
         self.draw_btn.setChecked(self.draw_mode)
@@ -645,18 +643,31 @@ class ChartTrader(QtWidgets.QMainWindow):
         if self.draw_mode:
             self.log.appendPlainText("Trend line: click start and end (right click/Esc cancels)")
 
-    def toggle_text(self, on: bool | None = None):
-        self.text_mode = (not self.text_mode) if on is None else bool(on)
-        if self.text_mode:
-            self.toggle_draw(False)
-        self.text_btn.setChecked(self.text_mode)
-        self._set_cursor()
-        if self.text_mode:
-            self.log.appendPlainText("Text: click the position in the chart (right click/Esc cancels)")
+    def new_text(self):
+        """Text dialog at once; on Enter the note goes to the mouse pointer position at that moment
+        (pointer outside the chart: where it was when the dialog opened, else the last price)."""
+        self.toggle_draw(False)
+        opened_at = self._pointer_point()
+        text = self._ask_text()
+        if text:
+            self.add_text(*(self._pointer_point() or opened_at or self._last_point()), text)
+
+    def _pointer_point(self) -> tuple[float, float] | None:
+        """Mouse pointer as (bar index, price) if it is inside the plot area, else None."""
+        scene_pos = self.plot.mapToScene(self.plot.mapFromGlobal(QtGui.QCursor.pos()))
+        if not self.plot.plotItem.vb.sceneBoundingRect().contains(scene_pos):
+            return None
+        return self._view_point(scene_pos)
+
+    def _last_point(self) -> tuple[float, float]:
+        """Running (or last) bar and its close."""
+        bar = self.agg.current or (self.agg.bars[-1] if self.agg.bars else None)
+        if bar is None:
+            return 0.0, 0.0
+        return float(len(self.agg.bars) - (self.agg.current is None)), bar.close
 
     def _set_cursor(self):
-        crosshair = self.draw_mode or self.text_mode
-        self.plot.setCursor(QtCore.Qt.CrossCursor if crosshair else QtCore.Qt.ArrowCursor)
+        self.plot.setCursor(QtCore.Qt.CrossCursor if self.draw_mode else QtCore.Qt.ArrowCursor)
 
     def _ask_text(self, default: str = "") -> str | None:
         """Text input: Enter accepts, Shift+Enter starts a new line; None = cancelled."""
@@ -913,16 +924,6 @@ class ChartTrader(QtWidgets.QMainWindow):
             elif ev.button() == QtCore.Qt.RightButton:
                 self.toggle_draw(False)
             return
-        if self.text_mode:
-            if ev.button() == QtCore.Qt.LeftButton:
-                x, y = self._view_point(ev.scenePos())
-                self.toggle_text(False)       # one text per activation, like the trend line
-                text = self._ask_text()
-                if text:
-                    self.add_text(x, y, text)
-            elif ev.button() == QtCore.Qt.RightButton:
-                self.toggle_text(False)
-            return
         # Outside draw mode, clicks in the chart deliberately trigger no orders:
         # trades only via buttons and hotkeys, so no misclick places an order.
         if ev.button() == QtCore.Qt.LeftButton:
@@ -971,10 +972,9 @@ class ChartTrader(QtWidgets.QMainWindow):
         elif k == QtCore.Qt.Key_F: self.flatten()
         elif k == QtCore.Qt.Key_R: self.reset_y()
         elif k == QtCore.Qt.Key_T: self.toggle_draw()
-        elif k == QtCore.Qt.Key_A and not ctrl: self.toggle_text()
+        elif k == QtCore.Qt.Key_A and not ctrl: self.new_text()
         elif k == QtCore.Qt.Key_H: self.toggle_cursor_line()
-        elif k == QtCore.Qt.Key_Escape and (self.draw_mode or self.text_mode):
-            self.toggle_draw(False); self.toggle_text(False)
+        elif k == QtCore.Qt.Key_Escape and self.draw_mode: self.toggle_draw(False)
         elif k == QtCore.Qt.Key_Delete: self.remove_drawings(all_items=shift)
         elif k == QtCore.Qt.Key_C and ctrl: self.copy_selected()
         elif sn and k == QtCore.Qt.Key_W and not ctrl: self.sniper_action(lambda: sn.arm_smart(True))

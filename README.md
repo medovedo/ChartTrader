@@ -154,7 +154,7 @@ marker. In both cases the `python3` in `PATH` must be the venv's (activate the v
 | Hover over a bar | Info box next to the pointer: bar number, date, time from–to (time zone of "Jump to"), open, high, low, close, volume, size in ticks, duration. Works for the running bar too and updates during playback |
 | H | Horizontal line at the mouse pointer with the price (snapped to the tick) on the right, on/off; also button "Crosshair (H)", default on. It ignores the mouse, so stop/target lines and drawings underneath can still be dragged |
 | T | Trend line: two left clicks place the line (preview follows the mouse), then drawing mode turns off; right click or Esc cancels. The line is extended to the right as a dashed line |
-| A | Text: click the position in the chart, enter the text in the dialog (Enter = OK, Shift+Enter = new line); then the mode is off again. Right click or Esc cancels |
+| A | Text: the dialog opens at once; Enter places the text at the mouse pointer in the chart (pointer outside the chart: where it was when the dialog opened, else at the last price). Shift+Enter = new line, Esc cancels |
 | Double click on text | Edit the text (emptying it deletes it) |
 | Click on line / text | Select it (yellow; a line shows its endpoints as handles); clicking empty space clears the selection |
 | Drag | Move line or text; on a line endpoint, only that point; Shift+drag drags a copy |
