@@ -151,7 +151,7 @@ def build_parser() -> argparse.ArgumentParser:
                     ).completer = dbn_files
     ap.add_argument("--list", action="store_true", help="Show contracts per file and exit")
     ap.add_argument("--journal", default="journal/trade_log.csv",
-                    help="trade log CSV, one row per closed trade (appended; 'off' = none; never for synthetic data)"
+                    help="trade log CSV, one row per closed trade (recreated at every start; 'off' = none; never for synthetic data)"
                     ).completer = FilesCompleter(("csv",))
     return ap
 

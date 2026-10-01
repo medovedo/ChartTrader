@@ -119,7 +119,7 @@ candles from the previous day up to the jump target. For file paths, pass `--con
 Context ticks only go through the aggregator, not through the engine.
 Playback constants (speed factors, idle-gap shortening, drawing window) are at the top of `chart_app.py`.
 
-**Trade log**: every closed trade is appended to `journal/trade_log.csv` (`--journal PATH`, `--journal off`;
+**Trade log**: every closed trade is appended to `journal/trade_log.csv`, which is recreated at every start (`--journal PATH`, `--journal off`;
 not written for synthetic data). One row per position from flat to flat, so an ATM trade with Target1
 and runner is one row with the average exit. Columns: `Replayed` (wall-clock time of the replay run),
 `Date`, `Open`, `Close` (Europe/Berlin), `Instrument`, `Setup` (`Manual Market`, `Manual Bracket` or the

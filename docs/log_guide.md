@@ -57,6 +57,7 @@ Trap Armed → Limit … @ L → FILL … → filled @ → STRUCTURAL SL → (Or
 → FILL (Target1) → AUTO-BE → TRAIL … → FILL (Runner) → JOURNAL … → closed.
 
 ## Trade-Log (journal/trade_log.csv, Excel: `;` und Dezimalkomma)
+Die Datei wird bei jedem Start des Charttraders neu angelegt (nur die Trades dieses Replays).
 Eine Zeile je Trade von flat zu flat (ATM mit Target1 + Runner = eine Zeile, Exit = Durchschnitt).
 Spalten: `Replayed` (wann ich den Replay gespielt habe) · `Date` · `Open` · `Close` (Berlin-Zeit) ·
 `Instrument` · `Setup` (`Manual Market`, `Manual Bracket` oder z. B. `Smart Short WADES16`) ·

@@ -4,7 +4,8 @@ In NETTING mode a position is closed when it is flat again, so a Sniper trade wi
 runner is one row (exit = average of all exits). The cache only keeps the last closed position
 (the position ID is reused), which is why the rows come from the events.
 
-The file is appended to row by row (survives a crash) and is meant for Excel on a German system:
+The file is recreated (header only) at every start, then appended to row by row (survives a crash)
+and is meant for Excel on a German system:
 separator ';', decimal comma, UTF-8 with BOM. Times in Europe/Berlin.
 """
 from __future__ import annotations
@@ -36,6 +37,9 @@ class TradeJournal:
         self.sep, self.decimal = sep, decimal
         self.replayed = datetime.now().strftime("%Y-%m-%d %H:%M")   # identifies this replay run
         self.rows: list[dict] = []
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.path, "w", encoding="utf-8-sig", newline="") as f:   # fresh log per start
+            f.write(self.sep.join(COLUMNS) + "\r\n")
 
     def record(self, event, setup: str) -> dict:
         """Append a row for a PositionClosed event; returns the row."""
@@ -61,11 +65,7 @@ class TradeJournal:
             "PnL": _num(round(float(event.realized_pnl), 2), d),
             "Duration": _duration(event.duration_ns),
         }
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        new = not self.path.exists() or self.path.stat().st_size == 0
-        with open(self.path, "a", encoding="utf-8-sig" if new else "utf-8", newline="") as f:
-            if new:
-                f.write(self.sep.join(COLUMNS) + "\r\n")
+        with open(self.path, "a", encoding="utf-8", newline="") as f:
             f.write(self.sep.join(row[c] for c in COLUMNS) + "\r\n")
         self.rows.append(row)
         return row
