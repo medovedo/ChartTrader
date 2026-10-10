@@ -25,4 +25,5 @@ Zum Vergleich der NT-Chart-Stand mit true (`pa_csv/base_true`). Summe 06.–09.1
 
 | Nr. | Datum | Regel / Parameter | alt → neu | Begründung | Testtage | Wirkung | Status NT8 |
 |---|---|---|---|---|---|---|---|
-| | | | | | | | |
+| 1 | 10.10.2026 | EC-11 neu: `PauseCountAfterCounterTrendF2E` (EntryCount). F2ES bei Trend +1 pausiert die Short-Zählung bis zum ersten Close unter der EMA; F2EL bei Trend −1 pausiert die Long-Zählung bis zum ersten Close über der EMA; Neustart dort bei 0 (Ursprung = diese Bar). Events `CountPaused`/`CountResumed`, Bar-Zustand „Paused“. | neue Option, Default **false** (aus) | Nutzer: nach dem gescheiterten Gegentrend-2E im Trend nicht weiter gegen den Trend zählen, bis der Preis die EMA-Seite wechselt. | 06.–09.10.2026 (ES DEC26, NT-Bars + NT-Ticks) | eingeschaltet, Summe 4 Tage: 1ES 260→193, **2ES 93→68**, F2ES 67→49; 1EL 265→227, **2EL 87→68**, F2EL 60→46; 27 Short- und 20 Long-Pausen. Ausgeschaltet: Parität zu NT unverändert 100 %. | offen |
+| 2 | 10.10.2026 | EC-11: Voreinstellung im CT (`entrycount_doubletrap.toml`) | `PauseCountAfterCounterTrendF2E` false → **true** | Nutzer: aktuelle Einstellung als CT-Default. Code-Default bleibt false (C#-Verhalten, Parität). | 06.–09.10.2026 | wie Nr. 1 (Summe 4 Tage: 2ES 93→68, 2EL 87→68); Ausgangsstand für weitere Vergleiche ist ab jetzt `pa_csv/ec11_pause` | offen |

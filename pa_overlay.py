@@ -28,8 +28,9 @@ class PaOverlay:
         plot.addItem(self.markers, ignoreBounds=True)
         self._marker_key = None
         self._sources: tuple = ()
-        # zoom/scroll without a refresh (paused): keep the pixel offsets of the texts
-        plot.plotItem.vb.sigRangeChanged.connect(lambda *_: self.reposition())
+        self._last = None               # (drawings, first, last, visible) of the last update
+        # zoom/pan without a refresh (paused, mouse drag): cover the newly visible bars, keep the pixel offsets
+        plot.plotItem.vb.sigRangeChanged.connect(lambda *_: self._on_range_changed())
 
     def clear(self) -> None:
         for it in self.items.values():
@@ -39,8 +40,18 @@ class PaOverlay:
         self.markers.setData([])
         self._marker_key = None
 
-    def update(self, drawings: list, lo: int, hi: int) -> None:
-        """drawings = Drawings objects to show; lo..hi = visible bar range (inclusive)."""
+    def _on_range_changed(self) -> None:
+        if self._last is not None:
+            self.update(*self._last)
+        else:
+            self.reposition()
+
+    def update(self, drawings: list, first: int, last: int, visible=None) -> None:
+        """drawings = Drawings objects to show; first..last = bars that have candles (inclusive), intersected with
+        the current view; visible(tag, obj) -> bool filters by kind (display switches of the chart)."""
+        self._last = (drawings, first, last, visible)
+        vlo, vhi = self.plot.plotItem.vb.viewRange()[0]
+        lo, hi = max(first, int(vlo) - 1), min(last, int(vhi) + 1)
         if tuple(id(d) for d in drawings) != self._sources:      # new runner after a jump
             self.clear()
             self._sources = tuple(id(d) for d in drawings)
@@ -48,6 +59,8 @@ class PaOverlay:
         marks = []
         for d in drawings:
             for tag, o in d.objects.items():
+                if visible is not None and not visible(tag, o):
+                    continue
                 if isinstance(o, DrawLine):
                     if o.bar2 >= lo and o.bar1 <= hi:
                         wanted[tag] = o

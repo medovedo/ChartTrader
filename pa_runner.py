@@ -33,7 +33,10 @@ class PaRunner:
     """One EntryCount and one DoubleTrap (which hosts its own EntryCount, like in NT)."""
 
     def __init__(self, cfg: PaConfig, instrument_name: str | None = None, export_csv: bool | None = None,
-                 csv_dir: str | Path | None = None, printer: Callable[[str], None] | None = None):
+                 csv_dir: str | Path | None = None, printer: Callable[[str], None] | None = None,
+                 draw_all: bool = False):
+        """draw_all: the indicators record every label/marker/line (the Show* switches only decide what NT draws,
+        never the logic); the chart then filters what is visible with its own switches."""
         ch = cfg.chart
         self.cfg = cfg
         self.zone = ZoneInfo(ch.TimeZone)
@@ -44,6 +47,11 @@ class PaRunner:
         if export_csv is not None:
             ec_cfg = replace(ec_cfg, ExportCsv=export_csv)
             dt_cfg = replace(dt_cfg, ExportCsv=export_csv)
+        if draw_all:
+            ec_cfg = replace(ec_cfg, ShowLabels=True, MaxLabeledCount=99, ShowLongCount=True, ShowShortCount=True,
+                             ShowFirstEntries=True, ShowFailedEntries=True, ShowCountOrigin=True)
+            dt_cfg = replace(dt_cfg, ShowWeak2EMarker=True, ShowInvalidThirdEntry=True, ShowEntryStopLines=True,
+                             MarkTrigger=True)
         self.ec_draw, self.dt_draw = Drawings(), Drawings()
         self.ec = EntryCount(ec_cfg, ch.TickSize, instrument_name, out, ch.CsvSuffix, self.ec_draw, printer)
         self.dt = DoubleTrap(dt_cfg, ch.TickSize, instrument_name, out, ch.CsvSuffix, self.dt_draw, printer)

@@ -375,7 +375,7 @@ class ReplayEngine:
             name = instrument_from_symbol(self.instrument.id.symbol.value)
         except (ValueError, IndexError):
             name = self.instrument.id.symbol.value
-        return PaRunner(self.pa_config, name, printer=self.strategy.log)
+        return PaRunner(self.pa_config, name, printer=self.strategy.log, draw_all=True)
 
     @property
     def pa(self):

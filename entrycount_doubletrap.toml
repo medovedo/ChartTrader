@@ -35,6 +35,9 @@ ResetAfterTwoLegs = true
 ResetOnNewExtreme = true
 FailedEntryMode = "PriorBarBreak"       # PriorBarBreak | SignalBarBreak
 InsideBarAsSignal = true
+# Tuning (not in EntryCount.cs yet): EC-11 / CHANGELOG Nr. 1. F2ES in an uptrend pauses the short count until
+# a close below the EMA (F2EL in a downtrend: long count until a close above the EMA)
+PauseCountAfterCounterTrendF2E = true          # CT default since 10.10.2026 (C#: off)
 # 5. Display
 ShowLabels = true
 MaxLabeledCount = 3

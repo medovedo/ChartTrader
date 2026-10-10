@@ -432,7 +432,13 @@ class ChartTrader(QtWidgets.QMainWindow):
         self.plot.addItem(self.preview)
         row = QtWidgets.QHBoxLayout(); lay.addLayout(row, 1)
         row.addWidget(self.plot, 1)
-        row.addWidget(self._build_sniper_panel(), 0)
+        right = QtWidgets.QWidget(); right.setFixedWidth(330)
+        rcol = QtWidgets.QVBoxLayout(right); rcol.setContentsMargins(0, 0, 0, 0)
+        rcol.addWidget(self._build_sniper_panel())
+        if pa_config is not None:
+            rcol.addWidget(self._build_pa_panel(pa_config))
+        rcol.addStretch(1)
+        row.addWidget(right, 0)
 
         bar = QtWidgets.QHBoxLayout(); lay.addLayout(bar)
         self.qty = QtWidgets.QSpinBox(); self.qty.setRange(1, 50); self.qty.setValue(1)
@@ -522,9 +528,68 @@ class ChartTrader(QtWidgets.QMainWindow):
             grid.addWidget(b, rr, cc)
         grid.addWidget(btn(f"SCRATCH TP (+{sn.cfg.scratch_offset_ticks})  C", "#ffd700", sn.scratch, fg="black"), r, 0, 1, 2)
         grid.addWidget(btn("CANCEL ALL  X", "#ff8c00", sn.cancel_all), r + 1, 0, 1, 2)
-        grid.setRowStretch(r + 2, 1)
         panel.setFixedWidth(330)
         return panel
+
+    # Display switches of the EntryCount/DoubleTrap labels: (key, text, initial value from the TOML)
+    def _build_pa_panel(self, cfg) -> QtWidgets.QWidget:
+        """Check boxes that show/hide the EntryCount and DoubleTrap objects (display only, the logic is unchanged)."""
+        ec, dt, ch = cfg.entry_count, cfg.double_trap, cfg.chart
+        groups = [
+            ("EntryCount", [("ec", "Show EntryCount", ch.ShowEntryCount and ec.ShowLabels),
+                            ("e1", "1st entries (1EL/1ES)", ec.ShowFirstEntries),
+                            ("e2", "2nd entries (2EL/2ES)", ec.MaxLabeledCount >= 2),
+                            ("e3", "3rd+ entries (3E, 4E …)", ec.MaxLabeledCount >= 3),
+                            ("long", "Long count (below)", ec.ShowLongCount),
+                            ("short", "Short count (above)", ec.ShowShortCount),
+                            ("f2e", "Failed 2E (F)", ec.ShowFailedEntries),
+                            ("origin", "Resets (R:KL / R:2L / R:NX)", ec.ShowCountOrigin)]),
+            ("DoubleTrap", [("dt", "Show DoubleTrap", ch.ShowDoubleTrap),
+                            ("signal", "DT signal (▲ DT / ▼ DT)", True),
+                            ("weak", "Weak 2E (DT?)", dt.ShowWeak2EMarker),
+                            ("invalid", "Invalid 3rd entry (DT x)", dt.ShowInvalidThirdEntry),
+                            ("lines", "Entry / stop lines", dt.ShowEntryStopLines),
+                            ("trigger", "Trigger diamond", dt.MarkTrigger)]),
+        ]
+        panel = QtWidgets.QWidget(); col = QtWidgets.QVBoxLayout(panel)
+        col.setContentsMargins(4, 8, 4, 4)
+        self.pa_show: dict[str, bool] = {}
+        for title, items in groups:
+            box = QtWidgets.QGroupBox(title); lay = QtWidgets.QVBoxLayout(box); lay.setSpacing(2)
+            for key, text, on in items:
+                cb = QtWidgets.QCheckBox(text); cb.setChecked(bool(on))
+                cb.setFocusPolicy(QtCore.Qt.NoFocus)          # hotkeys stay with the chart
+                self.pa_show[key] = bool(on)
+                cb.toggled.connect(lambda v, k=key: self._set_pa_show(k, v))
+                if key in ("ec", "dt"):
+                    f = cb.font(); f.setBold(True); cb.setFont(f)
+                lay.addWidget(cb)
+            col.addWidget(box)
+        return panel
+
+    def _set_pa_show(self, key: str, on: bool) -> None:
+        self.pa_show[key] = on
+        self.refresh()
+
+    def _pa_visible(self, tag: str, o) -> bool:
+        """Kind of a drawing object from its tag (the tags of EntryCount.cs / DoubleTrap.cs)."""
+        s = self.pa_show
+        if tag.startswith("EC_"):
+            if not s["ec"]:
+                return False
+            if not s["long" if tag.startswith(("EC_L_", "EC_F2L_", "EC_OL_")) else "short"]:
+                return False
+            if tag.startswith(("EC_L_", "EC_S_")):
+                n = int("".join(ch for ch in o.text.split("E")[0] if ch.isdigit()) or 0)
+                return s["e1"] if n == 1 else s["e2"] if n == 2 else s["e3"]
+            return s["f2e"] if tag.startswith("EC_F2") else s["origin"]
+        if not s["dt"]:
+            return False
+        for prefix, key in (("DT_W_", "weak"), ("DT_INV_", "invalid"), ("DT_E_", "lines"), ("DT_SL_", "lines"),
+                            ("DT_TRG_", "trigger"), ("DT_L_", "signal"), ("DT_S_", "signal")):
+            if tag.startswith(prefix):
+                return s[key]
+        return True
 
     def sniper_action(self, fn):
         """Sniper button/hotkey: execute, messages to the log, refresh the display."""
@@ -1121,10 +1186,7 @@ class ChartTrader(QtWidgets.QMainWindow):
         pa = self.engine.pa
         if pa is None:
             return
-        ch = self.pa_config.chart
-        sources = ([pa.ec_draw] if ch.ShowEntryCount else []) + ([pa.dt_draw] if ch.ShowDoubleTrap else [])
-        lo, hi = self.plot.plotItem.vb.viewRange()[0]
-        self.pa_overlay.update(sources, max(start, int(lo) - 1), min(n - 1, int(hi) + 1))
+        self.pa_overlay.update([pa.ec_draw, pa.dt_draw], start, n - 1, self._pa_visible)
 
     def refresh(self):
         bars = self.agg.bars + ([self.agg.current] if self.agg.current else [])

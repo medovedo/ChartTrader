@@ -81,6 +81,21 @@ Struktur; Limit = Stop ± 15 Ticks), sonst TooLarge.
   neuer Ursprung = diese Bar; F2E-Beobachtung endet.
 - Anzeige: Punkt am neuen Ursprung + R:KL / R:2L / R:NX.
 
+### EC-11 Pause der Gegentrend-Zählung nach ihrem F2E (neu, CHANGELOG Nr. 1, 10.10.2026)
+Parameter `PauseCountAfterCounterTrendF2E`. Im CT **eingeschaltet** (`entrycount_doubletrap.toml`, CHANGELOG Nr. 2);
+Code-Default false = Verhalten des C#-Codes (Parität).
+- **Beginn**: Ein F2ES auf einer Bar mit Trend +1 (EC-9, Aufwärtstrend) pausiert die **Short**-Zählung;
+  ein F2EL bei Trend −1 (Abwärtstrend) pausiert die **Long**-Zählung. Die Pause beginnt nach dem Reset b
+  (R:2L) derselben Bar; das laufende Bein wird verworfen.
+- **Während der Pause** ist die Richtung eingefroren: keine Beine, keine Kandidaten (auch keine Inside-Bars),
+  keine Entries, keine Labels, keine Resets a/c/d. Die andere Richtung zählt normal weiter.
+- **Ende**: die erste Bar, deren **Close unter der EMA** liegt (Short-Pause) bzw. **über der EMA** (Long-Pause).
+  Auf dieser Bar startet die Zählung neu wie bei der ersten Bar (Zähler 0, kein Bein, Ursprung = Tief bzw. Hoch
+  dieser Bar) und die Bar wird schon normal gezählt (kann ein Bein starten).
+- CSV: Events `CountPaused` und `CountResumed` (Reason mit Grund bzw. Close/EMA und neuem Ursprung); in der
+  Bar-Zeile steht der Zustand „Paused“. Ist der Parameter aus, ändert sich an der CSV nichts.
+- Gilt nur für EntryCount; das von DoubleTrap gehostete EntryCount bleibt beim C#-Verhalten (DT wird später getunt).
+
 ### EC-9 Trend und Swings
 - Trend: EMA(`EmaPeriod` 21) heute minus vor `EmaSlopeLookback` (5) Bars, in Ticks: ≥ `MinEmaSlopeTicks` (2) → +1,
   ≤ −2 → −1, sonst 0.
@@ -96,7 +111,7 @@ MinBodyPct 45 · MinClosePct 70 · MaxBreakoutWickPct 25 · UseRejectionExceptio
 RejectionMaxWickPct 10 · StopMode SignalAndPrevBar · RiskTemplateTicks 16 · RiskToleranceTicks 2 · MaxPullbackPct 49 ·
 RequireEqualOrHigherLeg **false** (entschieden 10.10.2026; der NT-Chart lief mit true) · ResetOnKeyLevel true ·
 ResetScope CounterTrendOnly · ResetAfterTwoLegs true · ResetOnNewExtreme true · FailedEntryMode PriorBarBreak ·
-InsideBarAsSignal true
+InsideBarAsSignal true · PauseCountAfterCounterTrendF2E **true** im CT (neu, EC-11; Code-Default false)
 
 ### Offene Punkte aus PORT_NOTES (nicht umgesetzt, nur zur Entscheidung)
 #1 Parameter in die CSV · #4 Ursprungs-Vergleich ohne halben Tick · #5 übersprungener Entry als eigenes Event.

@@ -336,3 +336,43 @@ def test_case_15_exhaustion_filter():
         dt.on_bar_update(b)
     assert dt.longSide.ExState == 2 and dt.ec.trendState == 1
     assert _candidate_reason(dt, lines, 1) == "exhaustion: new high after trend break"
+
+
+# --------------------------------------------------------------------------- tuning EC-11 (CHANGELOG Nr. 1)
+def ec11_rows():
+    """Uptrend, then 1ES (bar 15), 2ES (18), F2ES (19); an up leg and a would-be 1ES (21) while the price stays
+    above the EMA; then down bars until the first close below the EMA (bar 25)."""
+    rise = [(100 + i, 101 + i, 99.75 + i, 100.75 + i) for i in range(12)]
+    top = rise[-1][3]
+    seq = [(o + top - 100, h + top - 100, l + top - 100, c + top - 100) for o, h, l, c in SHORT_SEQ[1:]]
+    c0 = seq[-1][3]
+    rows = rise + seq + [(c0, c0 + 1.0, c0 - 0.25, c0 + 0.75), (c0 + 0.75, c0 + 1.0, c0 - 0.5, c0 - 0.25)]
+    p = rows[-1][3]
+    for _ in range(4):
+        rows.append((p, p + 0.25, p - 1.5, p - 1.25))
+        p -= 1.25
+    return rows
+
+
+def test_ec11_pause_short_count_after_f2es_in_uptrend():
+    """EC-11: F2ES in an uptrend pauses the short count until a close below the EMA (option on);
+    without the option bar 21 is a 1ES."""
+    rows = ec11_rows()
+    _, ev = run_ec(rows, ResetOnKeyLevel=False)
+    assert (21, 1, 20) in entries(ev, "Short") and not events(ev, "CountPaused")
+    ec, ev = run_ec(rows, ResetOnKeyLevel=False, PauseCountAfterCounterTrendF2E=True)
+    paused, resumed = events(ev, "CountPaused", "Short"), events(ev, "CountResumed", "Short")
+    assert [e["BarNo"] for e in paused] == ["19"] and paused[0]["Trend"] == "1"
+    assert [e["BarNo"] for e in resumed] == ["25"] and "below EMA" in resumed[0]["Reason"]
+    assert [b for b, _, _ in entries(ev, "Short")] == [15, 18]          # nothing between pause and resume
+    mid, _ = run_ec(rows[:22], ResetOnKeyLevel=False, PauseCountAfterCounterTrendF2E=True)
+    assert mid.shortState.Paused and not mid.longState.Paused                 # after bar 22: still paused
+    assert not ec.shortState.Paused
+
+
+def test_ec11_mirror_long_count_after_f2el_in_downtrend():
+    """EC-11 mirrored: F2EL in a downtrend pauses the long count until a close above the EMA."""
+    _, ev = run_ec(mirror(ec11_rows()), ResetOnKeyLevel=False, PauseCountAfterCounterTrendF2E=True)
+    assert [e["BarNo"] for e in events(ev, "CountPaused", "Long")] == ["19"]
+    assert [e["BarNo"] for e in events(ev, "CountResumed", "Long")] == ["25"]
+    assert [b for b, _, _ in entries(ev, "Long")] == [15, 18]

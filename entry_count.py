@@ -478,6 +478,7 @@ class CountState:
         self.F2ArmBar = 0
         self.F2RunExtreme = 0.0
         self.F2RunExtremeBar = 0
+        self.Paused = False                # tuning EC-11: counter-trend count paused after its F2E
 
 
 BAR_TYPE_FIRST = "First"
@@ -668,6 +669,9 @@ class EntryCount:
         self.update_f2_run_extreme(self.longState)
         self.update_f2_run_extreme(self.shortState)
 
+        self.end_pause(self.longState)
+        self.end_pause(self.shortState)
+
         self.apply_key_level_reset(self.longState, key_contact)
         self.apply_key_level_reset(self.shortState, key_contact)
 
@@ -749,6 +753,10 @@ class EntryCount:
         ctx.ShortInLeg = self.shortState.InLeg
         ctx.ShortCandidateBarNo = bn.get(self.shortState.Candidate.Index)
         ctx.ShortOriginBarNo = bn.get(self.shortState.OriginBar)
+        if self.longState.Paused:
+            ctx.LongStateText = "Paused"
+        if self.shortState.Paused:
+            ctx.ShortStateText = "Paused"
 
         if self.cfg.ExportCsv and self.cfg.CsvIncludeBars:
             self.diag.write_csv(self.tradingDay, self.diag.format_bar())
@@ -777,6 +785,8 @@ class EntryCount:
 
     def run_machine(self, c: CountState) -> None:
         # port of EntryCount.RunMachine, lines 1078-1112
+        if c.Paused:                        # tuning EC-11
+            return
         b0, half = self._bar(0), self.halfTick
         if not c.InLeg:
             # Pullback (or waiting at the origin): a bar breaking the reference bar in leg direction starts a new leg.
@@ -807,7 +817,7 @@ class EntryCount:
 
     def take_inside_bar_as_candidate(self, c: CountState) -> None:
         # port of EntryCount.TakeInsideBarAsCandidate, lines 1118-1122
-        if c.InLeg:
+        if c.InLeg and not c.Paused:        # tuning EC-11: no candidate while paused
             c.Candidate = self.currentSnap
 
     def fire_entry(self, c: CountState) -> None:
@@ -926,8 +936,47 @@ class EntryCount:
         if cfg.ResetAfterTwoLegs:
             self.reset_count(c, RESET_TWO_LEGS, c.F2RunExtreme, c.F2RunExtremeBar)
 
+        self.start_pause(c)
+
+    # --- Tuning EC-11 (CHANGELOG_Tuning.md Nr. 1, not in EntryCount.cs yet) ------------------------
+    def start_pause(self, c: CountState) -> None:
+        """After an F2E against the EMA trend (F2ES in an uptrend, F2EL in a downtrend) the count of that
+        direction pauses until a bar closes on the other side of the EMA (end_pause)."""
+        if not self.cfg.PauseCountAfterCounterTrendF2E or c.Paused:
+            return
+        if self.currentTrend != (-1 if c.IsLong else 1):
+            return
+        c.Paused = True
+        c.InLeg = False
+        c.F2Armed = False
+        if self.diag is not None:
+            self.log_event("CountPaused", c.IsLong, 0, self.currentSnap, False,
+                           f"F2E{'L' if c.IsLong else 'S'} against the {'downtrend' if c.IsLong else 'uptrend'}: "
+                           f"{'long' if c.IsLong else 'short'} count paused until a close "
+                           f"{'above' if c.IsLong else 'below'} the EMA")
+
+    def end_pause(self, c: CountState) -> None:
+        """First close beyond the EMA ends the pause: the count restarts like on the first bar (origin = this bar)."""
+        if not c.Paused:
+            return
+        b0, ema0 = self._bar(0), self.ema(0)
+        if not (b0.close > ema0 if c.IsLong else b0.close < ema0):
+            return
+        c.Paused = False
+        c.Count = 0
+        c.InLeg = False
+        c.HasPrevLeg = False
+        c.OriginPrice = b0.high if c.IsLong else b0.low
+        c.OriginBar = self.CurrentBar
+        if self.diag is not None:
+            self.log_event("CountResumed", c.IsLong, 0, self.currentSnap, False,
+                           f"close {net_g(b0.close)} {'above' if c.IsLong else 'below'} EMA {net_g(round(ema0, 4))}; "
+                           f"new origin {net_g(c.OriginPrice)} @bar {self.currentBarNo}")
+
     def apply_extreme_and_key_level_resets(self, c: CountState, key_contact: bool) -> None:
         # port of EntryCount.ApplyExtremeAndKeyLevelResets, lines 1256-1282
+        if c.Paused:                        # tuning EC-11: no resets while paused
+            return
         b0, half, cfg = self._bar(0), self.halfTick, self.cfg
         # Reset d) ASSUMPTION: a new extreme beyond the origin moves the origin (the 2E, if any, has succeeded).
         if cfg.ResetOnNewExtreme and (b0.high > c.OriginPrice + half if c.IsLong else b0.low < c.OriginPrice - half):
@@ -951,7 +1000,7 @@ class EntryCount:
     def apply_key_level_reset(self, c: CountState, key_contact: bool) -> None:
         # port of EntryCount.ApplyKeyLevelReset, lines 1289-1306
         cfg = self.cfg
-        if not cfg.ResetOnKeyLevel or not key_contact:
+        if not cfg.ResetOnKeyLevel or not key_contact or c.Paused:     # tuning EC-11: not while paused
             return
 
         applies = cfg.ResetScope == "Both" or (self.currentTrend == -1 if c.IsLong else self.currentTrend == 1)

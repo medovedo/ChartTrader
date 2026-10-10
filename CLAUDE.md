@@ -91,7 +91,10 @@ bewusste Architekturentscheidung – keine eigene Fill-Simulation bauen.
   (`data_loader.load_nt_ticks`, Aggressor aus Bid/Ask; `--day` = CME-Handelstag). `tick:2000` aus NTs Ticks = NTs Bars
   (1736/1736 identisch); Chart-Lauf (Kontext 06.–08., Replay 09.10.) schreibt mit `ExportCsv` 100 % NT-gleiche CSVs.
   Tuning-Werkzeuge: `SPEC_EntryCount_DoubleTrap.md` (Regeln EC-1…10), `CHANGELOG_Tuning.md`, `pa_stats.py vorher nachher`.
-  Ausgangswert fürs Tuning `RequireEqualOrHigherLeg = false` (Nutzer, 10.10.2026). Tests: `test_entrycount_doubletrap.py`
+  Ausgangswert fürs Tuning `RequireEqualOrHigherLeg = false` (Nutzer, 10.10.2026). Tuning-Änderungen im Port sind mit
+  „tuning EC-n“ markiert und noch nicht in den .cs-Dateien (Schritt 4): Nr. 1 = EC-11 `PauseCountAfterCounterTrendF2E`
+  (Default aus; nur EntryCount, nicht das von DoubleTrap gehostete). Chart-Panel rechts: Anzeige-Schalter (nur Filter,
+  Indikatoren zeichnen im Chart alles, `PaRunner(draw_all=True)`). Tests: `test_entrycount_doubletrap.py`
   (pytest, C#-Testfälle 1–15). Tuning erst nach 100 % Parität: SPEC → Code → `CHANGELOG_Tuning.md`.
 - `export_bars.py` – Bars als CSV wie NTs Indikator `TickBarsExporter.cs` (Dateiname
   `Bar_Export_ESMAR25_2000 - Tick_<Datum>.csv`, Zeit = letzter Tick in Berlin, Dezimalkomma, BOM, CRLF,

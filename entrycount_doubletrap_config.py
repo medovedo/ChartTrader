@@ -53,6 +53,8 @@ class EntryCountConfig:
     ResetOnNewExtreme: bool = True
     FailedEntryMode: str = "PriorBarBreak"
     InsideBarAsSignal: bool = True
+    # Tuning (not in EntryCount.cs yet, see SPEC/CHANGELOG)
+    PauseCountAfterCounterTrendF2E: bool = False    # EC-11: F2ES in an uptrend pauses the short count (mirror long)
     # Display
     ShowLabels: bool = True
     MaxLabeledCount: int = 3
