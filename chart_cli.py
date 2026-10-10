@@ -153,6 +153,18 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--journal", default="journal/trade_log.csv",
                     help="trade log CSV, one row per closed trade (recreated at every start; 'off' = none; never for synthetic data)"
                     ).completer = FilesCompleter(("csv",))
+    ap.add_argument("--nt-ticks", metavar="TXT",
+                    help="NinjaTrader tick export (Historical Data > Export, Last, UTC), e.g. 'ES 12-26.Last.txt', instead of "
+                         "Databento; --day = CME trading day(s) to replay (default: the last one in the file)"
+                    ).completer = FilesCompleter(("txt",))
+    ap.add_argument("--context-from", metavar="YYYY-MM-DD",
+                    help="with --nt-ticks: first trading day of the candle context (default: the day before --day; "
+                         "use the first day NT loaded to get the same EMA and entry counts as the NT chart)")
+    ap.add_argument("--pa", choices=["on", "off"], default="on",
+                    help="EntryCount/DoubleTrap ports on every closed bar, with labels in the chart (default on)")
+    ap.add_argument("--pa-config", default=None,
+                    help="parameter file of the EntryCount/DoubleTrap ports (default entrycount_doubletrap.toml)"
+                    ).completer = FilesCompleter(("toml",))
     return ap
 
 

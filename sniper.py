@@ -26,6 +26,7 @@ from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
 from atm_templates import AtmTemplate, load_atm_template, max_risk_from_name
+from trade_journal import TradeInfo, ema_last
 
 CHICAGO = ZoneInfo("America/Chicago")
 
@@ -60,6 +61,7 @@ class SniperConfig:
     trail_buffer_ticks: int = 1
     scratch_offset_ticks: int = 2
     show_only_smart_buttons: bool = True
+    journal_ema_period: int = 21           # trade log: distance of the signal bar close to this EMA
 
 
 class SetupRejected(Exception):
@@ -300,6 +302,7 @@ class AtmTrade:
     t1_filled: bool = False            # Target1 filled -> runner trail may run (independent of auto-BE)
     current_runner_stop: float = 0.0
     scratch_target: float = 0.0
+    info: TradeInfo = field(default_factory=TradeInfo)   # trade log details (data only)
 
     @property
     def has_runner(self) -> bool:
@@ -320,6 +323,7 @@ class Trap:
     bar: int
     template: AtmTemplate
     label: str
+    info: TradeInfo | None = None
 
 
 class Sniper:
@@ -405,7 +409,8 @@ class Sniper:
         return self._arm(setup, tpl, "Deep Long" if is_long else "Deep Short")
 
     def _arm(self, setup: Setup, tpl: AtmTemplate, label: str) -> bool:
-        self.trap = Trap(setup.is_long, setup.trigger, setup.limit, setup.stop, self.cur, tpl, label)
+        self.trap = Trap(setup.is_long, setup.trigger, setup.limit, setup.stop, self.cur, tpl, label,
+                         self._trade_info(setup, tpl, setup.limit != setup.trigger))
         self.notice = ""
         self._log(f"{label} Trap Armed. Trigger: {setup.trigger}, Limit: {setup.limit}, SL: {setup.stop}, "
                   f"ATM: {tpl.name} ({setup.note})")
@@ -428,8 +433,23 @@ class Sniper:
         crossed = c0 >= setup.trigger if is_long else c0 <= setup.trigger
         self.notice = ""
         self._place(setup.is_long, tpl, setup.limit, setup.stop, setup.trigger,
-                    None if crossed else setup.trigger, "Momentum Long" if is_long else "Momentum Short")
+                    None if crossed else setup.trigger, "Momentum Long" if is_long else "Momentum Short",
+                    self._trade_info(setup, tpl, False))
         return True
+
+    def _trade_info(self, setup: Setup, tpl: AtmTemplate, pullback: bool) -> TradeInfo | None:
+        """Trap data for the trade log; never lets a journal problem stop an entry."""
+        try:
+            b1, b2 = self.bars[-1], self.bars[-2]
+            ema = ema_last([b.close for b in self.bars], self.cfg.journal_ema_period)
+            return TradeInfo(
+                entry_type="PullbackLimit" if pullback else "Direct",
+                signal_ts=b1.ts_open, signal_ohlc=(b1.open, b1.high, b1.low, b1.close),
+                prev_hl=(b2.high, b2.low), trigger=setup.trigger, limit=setup.limit if pullback else None,
+                initial_sl=setup.stop, template=tpl.name, max_risk=self.max_risk,
+                dist_ema=None if ema is None else b1.close - ema)
+        except Exception:
+            return None
 
     def cancel_all(self) -> None:
         """Killswitch: Trap removed, entry orders cancelled, positions closed."""
@@ -472,7 +492,7 @@ class Sniper:
 
     # --- order placement ----------------------------------------------------------
     def _place(self, is_long: bool, tpl: AtmTemplate, limit: float, stop: float, trigger: float,
-               entry_trigger: float | None, label: str) -> AtmTrade:
+               entry_trigger: float | None, label: str, info: TradeInfo | None = None) -> AtmTrade:
         sign = 1 if is_long else -1
         brackets = []
         for i, br in enumerate(tpl.brackets):
@@ -483,6 +503,10 @@ class Sniper:
             e, s, t = self.b.place_bracket(is_long, br.quantity, limit, sl, tp, entry_trigger)
             brackets.append(TrackedBracket(e, s, t, br.quantity, br.be_trigger_ticks, br.be_plus_ticks, i > 0))
         trade = AtmTrade(is_long, tpl, brackets, stop, trigger, self.cur, label)
+        if info is not None:
+            trade.info = info
+        trade.info.trade = trade
+        trade.info.targets = [None] * len(brackets)
         self.trades.append(trade)
         kind = "StopLimit" if entry_trigger else "Limit"
         self._log(f"{label}: {kind} {tpl.entry_quantity} @ {limit} ({tpl.name}), intended SL {stop}")
@@ -510,7 +534,7 @@ class Sniper:
             hit = bar0.high >= tr.trigger if tr.is_long else bar0.low <= tr.trigger
             if hit:
                 self.trap = None
-                self._place(tr.is_long, tr.template, tr.limit, tr.stop, tr.trigger, None, tr.label)
+                self._place(tr.is_long, tr.template, tr.limit, tr.stop, tr.trigger, None, tr.label, tr.info)
 
         for t in list(self.trades):
             if self._manage(t, new_bar):
@@ -584,6 +608,11 @@ class Sniper:
                     if v.filled_qty > 0:
                         self._replace_exits(t, br, v)
                 self._log(f"PARTIAL FILL: rest of entry cancelled ({self.cfg.partial_fill_cancel_ticks} ticks run)")
+
+        # Trade log: planned targets relative to the actual fill
+        for i, (br, v) in enumerate(zip(t.brackets, views)):
+            if t.info.targets[i] is None and v.filled_qty > 0:
+                t.info.targets[i] = self._r(v.avg_px + t.sign * self._target_ticks(t, br) * tick)
 
         # Align targets to the actual entry price (fill may differ from the limit, e.g. Momentum)
         for br, v in zip(t.brackets, views):

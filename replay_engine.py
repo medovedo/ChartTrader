@@ -27,7 +27,7 @@ from nautilus_trader.trading.strategy import Strategy, StrategyConfig
 
 from range_bars import RangeBarAggregator
 from sniper import OrderView, Sniper, SniperConfig
-from trade_journal import TradeJournal
+from trade_journal import ExitFill, TradeInfo, TradeJournal
 
 # Nautilus 1.231 calls pd.Timestamp.utcnow() in BacktestEngine.run (deprecated in pandas 3); not our code
 warnings.filterwarnings("ignore", message=r"Timestamp\.utcnow is deprecated", category=DeprecationWarning)
@@ -46,11 +46,14 @@ class ManualStrategy(Strategy):
         self.events: list[str] = []
         self.agg = None                 # set by ReplayEngine
         self.sniper: Sniper | None = None
-        self._manual_moves: set[ClientOrderId] = set()   # GUI moves waiting for exchange confirmation
+        self._manual_moves: dict[ClientOrderId, float] = {}   # GUI moves waiting for confirmation -> old price
         self.journal = None                 # TradeJournal, set by ReplayEngine (optional)
         self._order_tags: dict[ClientOrderId, str] = {}  # entry order -> setup name for the journal
+        self._order_info: dict[ClientOrderId, TradeInfo] = {}  # entry order -> journal details (manual bracket)
         self._position_setup = "Manual"
+        self._position_info: TradeInfo | None = None    # details of the open position for the journal
         self.realized_closed = 0.0          # sum over all closed positions (the cache keeps only the last one)
+        self.pa = None                      # PaRunner (EntryCount/DoubleTrap ports), set by ReplayEngine (optional)
 
     def on_start(self):
         self.instrument = self.cache.instrument(InstrumentId.from_str(self.config.instrument_id))
@@ -58,47 +61,105 @@ class ManualStrategy(Strategy):
 
     def on_trade_tick(self, tick: TradeTick):
         if self.agg is not None:
-            self.agg.update(float(tick.price), float(tick.size), tick.ts_event)
+            self.aggregate(float(tick.price), float(tick.size), tick.ts_event)
             if self.sniper is not None:
                 self.sniper.on_tick(self.agg.current, self.agg.bars, tick.ts_event)
 
+    def aggregate(self, price: float, size: float, ts: int) -> None:
+        """Bars and the bar-close indicators; also used for context ticks that do not go through the engine."""
+        closed = self.agg.update(price, size, ts)
+        if self.pa is not None:
+            self.pa.on_tick(price, ts, closed)
+
     def on_order_filled(self, event):
         self.events.append(f"FILL {event.order_side.name} {event.last_qty} @ {event.last_px}")
+        try:
+            self._journal_exit(event)
+        except Exception as e:          # journal details must never disturb the replay
+            self.events.append(f"JOURNAL detail error: {e}")
 
     def on_order_rejected(self, event):
         self.events.append(f"REJECTED {event.reason}")
 
     def on_order_modify_rejected(self, event):
-        self._manual_moves.discard(event.client_order_id)
+        self._manual_moves.pop(event.client_order_id, None)
         self.events.append(f"MODIFY REJECTED {event.reason}")
 
     def on_order_updated(self, event):
         # Manual move confirmed by the exchange: only now tell the Sniper (a rejected move must not count)
         if event.client_order_id in self._manual_moves:
-            self._manual_moves.discard(event.client_order_id)
+            old = self._manual_moves.pop(event.client_order_id)
             px = event.trigger_price if event.trigger_price is not None else event.price
             if self.sniper is not None and px is not None:
                 self.sniper.on_manual_move(event.client_order_id, float(px))
+            if px is not None:
+                try:
+                    self._journal_move(event.client_order_id, old, float(px))
+                except Exception as e:
+                    self.events.append(f"JOURNAL detail error: {e}")
 
     def on_position_opened(self, event):
-        self._position_setup = self._setup_of(event.opening_order_id)
+        self._position_setup, self._position_info = self._origin(event.opening_order_id)
 
     def on_position_closed(self, event):
         self.realized_closed += float(event.realized_pnl)
         if self.journal is not None:
-            r = self.journal.record(event, self._position_setup)
+            r = self.journal.record(event, self._position_setup, self._position_info)
             self.events.append(f"JOURNAL {r['Side']} {r['Qty']} {r['Entry']} -> {r['Exit']}  "
                                f"{r['Ticks']} ticks  PnL {r['PnL']}  ({r['Setup']})")
+        self._position_info = None
 
-    def _setup_of(self, oid: ClientOrderId) -> str:
-        """Origin of the order that opened the position: GUI tag or Sniper setup + ATM template."""
+    def _origin(self, oid: ClientOrderId) -> tuple[str, TradeInfo]:
+        """Origin of the order that opened the position: GUI tag or Sniper setup + ATM template,
+        plus the details for the journal."""
         if oid in self._order_tags:
-            return self._order_tags[oid]
+            return self._order_tags[oid], self._order_info.get(oid) or TradeInfo()
         if self.sniper is not None:
             for t in self.sniper.trades:
                 if any(br.entry == oid for br in t.brackets):
-                    return f"{t.label} {t.template.name}"
-        return "Manual"
+                    return f"{t.label} {t.template.name}", t.info
+        return "Manual", TradeInfo()
+
+    # --- Journal details (data only, no influence on the orders) ----------------------
+    def _role(self, oid: ClientOrderId) -> str:
+        """Role of an exit order of the open position: T1/T2 (targets), SL/SL1/SL2 (stops), "" otherwise."""
+        info = self._position_info
+        if info is None:
+            return ""
+        t = info.trade
+        if t is not None:
+            for i, br in enumerate(t.brackets):
+                if br.tp == oid:
+                    return f"T{i + 1}"
+                if br.sl == oid:
+                    return f"SL{i + 1}" if len(t.brackets) > 1 else "SL"
+        return info.legs.get(oid, "")
+
+    def _journal_exit(self, event) -> None:
+        info = self._position_info
+        if info is None:
+            return
+        pos = self.cache.position(event.position_id) if event.position_id is not None else None
+        if pos is None or event.order_side == pos.entry:
+            return                      # entry fill (the position is already updated, may be closed)
+        o = self.cache.order(event.client_order_id)
+        is_stop = o.order_type in (OrderType.STOP_MARKET, OrderType.STOP_LIMIT)
+        trig = getattr(o, "trigger_price", None)
+        info.exits.append(ExitFill(float(event.last_px), float(event.last_qty), event.ts_event,
+                                   self._role(event.client_order_id), is_stop, float(trig) if trig else 0.0))
+
+    def _journal_move(self, oid: ClientOrderId, old: float, new: float) -> None:
+        info = self._position_info
+        if info is None or self.journal is None:
+            return
+        o = self.cache.order(oid)
+        label = self._role(oid) or o.order_type.name
+        new_s = f"{new:.2f}"
+        if o.order_type == OrderType.STOP_MARKET:
+            pos = self.cache.position(o.position_id) if o.position_id is not None else None
+            if pos is not None and self.journal.is_breakeven(new, float(pos.avg_px_open)):
+                new_s = "BE"
+        info.manual_changes.append(f"{label} {old:.2f}->{new_s}".replace(".", self.journal.decimal))
 
     # --- Calls from the GUI --------------------------------------------------
     def market(self, side: OrderSide, qty: int):
@@ -147,6 +208,11 @@ class ManualStrategy(Strategy):
         )
         entry = next(o for o in orders.orders if o.parent_order_id is None)
         self._order_tags[entry.client_order_id] = "Manual Bracket"
+        sl = next(o for o in orders.orders if o.order_type == OrderType.STOP_MARKET)
+        tp = next(o for o in orders.orders if o.parent_order_id is not None and o.order_type == OrderType.LIMIT)
+        self._order_info[entry.client_order_id] = TradeInfo(
+            initial_sl=float(sl.trigger_price), targets=[float(tp.price)],
+            legs={sl.client_order_id: "SL", tp.client_order_id: "T1"})
         self.submit_order_list(orders)
 
     def flatten(self):
@@ -236,10 +302,12 @@ class ManualStrategy(Strategy):
         if o is None or not o.is_open:
             return
         if o.order_type == OrderType.STOP_MARKET:
+            old = float(o.trigger_price)
             self.modify(oid, trigger_price=price)
         else:
+            old = float(o.price)
             self.modify(oid, price=price)
-        self._manual_moves.add(oid)      # Sniper is notified in on_order_updated
+        self._manual_moves[oid] = old    # Sniper and journal are notified in on_order_updated
 
     def log(self, msg: str) -> None:
         self.events.append(msg)
@@ -259,8 +327,9 @@ class ReplayEngine:
     def __init__(self, instrument: Instrument, ticks: list[TradeTick],
                  starting_balance: float = 50_000.0, agg=None,
                  sniper_config: SniperConfig | None = None, enable_sniper: bool = True,
-                 journal_path: str | None = None):
+                 journal_path: str | None = None, pa_config=None):
         self.instrument = instrument
+        self.pa_config = pa_config          # PaConfig: EntryCount/DoubleTrap ports run on every closed bar
         self.ticks = ticks
         self.i = 0
         self.engine = BacktestEngine(BacktestEngineConfig(
@@ -284,6 +353,7 @@ class ReplayEngine:
             self.strategy.sniper = Sniper(self.strategy, tick_size, sniper_config)
         if journal_path:
             self.strategy.journal = TradeJournal(journal_path, tick_size)
+        self.strategy.pa = self._new_pa()
         self.engine.add_strategy(self.strategy)
         self.last_price = float(ticks[0].price) if ticks else 0.0
         self.ts = ticks[0].ts_event if ticks else 0
@@ -297,9 +367,27 @@ class ReplayEngine:
     def sniper(self) -> Sniper | None:
         return self.strategy.sniper
 
+    def _new_pa(self):
+        if self.pa_config is None:
+            return None
+        from pa_runner import PaRunner, instrument_from_symbol
+        try:
+            name = instrument_from_symbol(self.instrument.id.symbol.value)
+        except (ValueError, IndexError):
+            name = self.instrument.id.symbol.value
+        return PaRunner(self.pa_config, name, printer=self.strategy.log)
+
+    @property
+    def pa(self):
+        return self.strategy.pa
+
     def reset_aggregator(self):
-        """Install an empty aggregator of the same kind (before a jump); the trap is discarded."""
+        """Install an empty aggregator of the same kind (before a jump); the trap is discarded,
+        the EntryCount/DoubleTrap ports start over (they are fed again with the context bars)."""
         self.strategy.agg = self.strategy.agg.fresh()
+        if self.strategy.pa is not None:
+            self.strategy.pa.finish()
+            self.strategy.pa = self._new_pa()
         if self.strategy.sniper is not None:
             self.strategy.sniper.trap = None
         return self.strategy.agg

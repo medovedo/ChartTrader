@@ -31,3 +31,6 @@ nt
 /test_1211/
 /bar_export/
 /journal/
+
+# NT tick exports (Historical Data > Export), large
+*.Last.txt

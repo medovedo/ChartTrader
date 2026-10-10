@@ -1,0 +1,154 @@
+# Parameters of the EntryCount and DoubleTrap ports (ChartTrader).
+# Names and defaults = NinjaScript properties of EntryCount.cs / DoubleTrap.cs (State.SetDefaults).
+# Change values here, not in the code. Unknown keys are rejected. Enums: C# member names. Colors: WPF brush names.
+# Tuning changes: first SPEC_EntryCount_DoubleTrap.md, then here/the code, then CHANGELOG_Tuning.md.
+
+[EntryCount]
+# 1. Shared
+EmaPeriod = 21
+KeyLevelToleranceTicks = 2
+SwingStrength = 2
+UseSwingSR = false
+SrLookbackSwings = 5
+SrToleranceTicks = 2
+UseTrendlines = false
+OutsideBarPolicy = "BothSides"          # CloseDirection | BothSides | Ignore
+EmaSlopeLookback = 5
+MinEmaSlopeTicks = 2.0
+# 2. Signal bar (Rule 5)
+MinBodyPct = 45.0
+MinClosePct = 70.0
+MaxBreakoutWickPct = 25.0
+UseRejectionException = true
+RejectionMinClosePct = 90.0
+RejectionMaxWickPct = 10.0
+# 3. Stop / risk
+StopMode = "SignalAndPrevBar"           # SignalAndPrevBar | SignalBarOnly
+RiskTemplateTicks = 16
+RiskToleranceTicks = 2
+MaxPullbackPct = 49.0
+# 4. Counting / reset
+RequireEqualOrHigherLeg = false
+ResetOnKeyLevel = true
+ResetScope = "CounterTrendOnly"         # CounterTrendOnly | Both
+ResetAfterTwoLegs = true
+ResetOnNewExtreme = true
+FailedEntryMode = "PriorBarBreak"       # PriorBarBreak | SignalBarBreak
+InsideBarAsSignal = true
+# 5. Display
+ShowLabels = true
+MaxLabeledCount = 3
+ShowLongCount = true
+ShowShortCount = true
+ShowFirstEntries = true
+ShowFailedEntries = true
+ShowCountOrigin = true
+ShowQualityColoring = true
+ShowRiskTicks = false
+LabelFontSize = 10
+BarNumberClearance = 32
+EnableAlerts = false
+# 6. Colors
+LongColor = "DodgerBlue"
+ShortColor = "Crimson"
+QualityFailColor = "Gray"
+FailedLongColor = "Green"
+FailedShortColor = "Red"
+OriginColor = "Goldenrod"
+# 7. Diagnostics (pa_run.py always writes the CSV; in the chart only with ExportCsv = true)
+DebugLog = false
+ExportCsv = false
+CsvIncludeBars = true
+
+[DoubleTrap]
+# 01. Shared (passed to the hosted EntryCount)
+EmaPeriod = 21
+KeyLevelToleranceTicks = 2
+SwingStrength = 2
+UseSwingSR = false
+SrLookbackSwings = 5
+SrToleranceTicks = 2
+UseTrendlines = false
+OutsideBarPolicy = "BothSides"
+EmaSlopeLookback = 5
+MinEmaSlopeTicks = 2.0
+# 02. Signal bar (Rule 5)
+MinBodyPct = 45.0
+MinClosePct = 70.0
+MaxBreakoutWickPct = 25.0
+UseRejectionException = true
+RejectionMinClosePct = 90.0
+RejectionMaxWickPct = 10.0
+# 03. Stop / risk
+StopMode = "SignalAndPrevBar"
+RiskTemplateTicks = 16
+RiskToleranceTicks = 2
+MaxPullbackPct = 49.0
+BlockTooLarge = false
+# 04. EntryCount (hosted)
+RequireEqualOrHigherLeg = false
+ResetOnKeyLevel = true
+ResetScope = "CounterTrendOnly"
+ResetAfterTwoLegs = true
+ResetOnNewExtreme = true
+FailedEntryMode = "PriorBarBreak"
+InsideBarAsSignal = true
+# 05. Double Trap
+DtEmaToleranceTicks = 2
+DtMaxBarsAfterF2E = 10
+DtAllowF2EBarAsSignal = true
+# 06. Weak 2E (DT expected)
+UseWeakEmaGap = true
+EmaGapTicks = 4
+UseWeakCongestion = true
+CongestionLookback = 6
+CongestionOverlapPct = 60.0
+CongestionRangeTicks = 12
+WeakIfQualityFails = true
+UseWeakCounterTrend = true
+RequireWeak2E = false
+# 07. Context filters
+RangeLookback = 30
+RangeCrossCount = 4
+UseRule6Filter = false
+Rule6Lookback = 10
+Rule6MinBars = 4
+Rule6MaxSpanTicks = 26
+Rule6MinEfficiencyPct = 5.0
+UseExhaustionFilter = true
+ExhaustionMinTrendBars = 20
+# 08. Display
+ShowEntryCountLabels = false
+ShowFirstEntries = true
+ShowWeak2EMarker = true
+ShowInvalidThirdEntry = true
+ShowEntryStopLines = true
+ShowDtRiskTicks = false
+MarkTrigger = true
+LabelFontSize = 11
+BarNumberClearance = 32
+EnableAlerts = true
+# 09. Colors
+LongColor = "LimeGreen"
+ShortColor = "Red"
+QualityFailColor = "Gray"
+WeakColor = "DarkOrange"
+InvalidColor = "DimGray"
+StopLineColor = "IndianRed"
+TriggerColor = "Gold"
+FailedLongColor = "Green"
+FailedShortColor = "Red"
+# 10. Diagnostics
+DebugLog = false
+ExportCsv = false
+CsvIncludeBars = true
+
+[ChartTrader]
+# Not in NT: chart display and output of the ChartTrader
+ShowEntryCount = true
+ShowDoubleTrap = true
+TickSize = 0.25
+TimeZone = "Europe/Berlin"     # NT's time zone (bar times, bar numbers, CSV)
+CsvDir = "pa_csv"
+CsvSuffix = "_CT"
+TickTimeResolutionMs = 1       # intrabar order: ticks with the closing time stamp of a bar count for the next bar

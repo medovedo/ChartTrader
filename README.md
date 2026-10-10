@@ -16,6 +16,12 @@ SimulatedExchange (streaming backtest), not from custom logic.
 | `export_nt8.py` | Databento ticks → NinjaTrader 8 import file |
 | `export_bars.py` | Bars → CSV files like NT's TickBarsExporter indicator |
 | `trade_journal.py` | Trade log: one CSV row per closed trade |
+| `entry_count.py`, `double_trap.py` | 1:1 ports of the NT8 indicators EntryCount and DoubleTrap (see below) |
+| `entrycount_doubletrap.toml` | Their parameters (NinjaScript property names and defaults), loaded by `entrycount_doubletrap_config.py` |
+| `pa_runner.py`, `pa_run.py` | Drive both ports bar by bar (chart and command line), NT bar/tick readers |
+| `pa_overlay.py` | Chart display of their labels and lines |
+| `parity_check.py` | Compares NT8 and ChartTrader event CSVs |
+| `PORT_NOTES.md` | Observations about the C# code and the parity status (German) |
 | `docs/log_guide.md` | How to read the log messages and the trade log (German, context for trade analysis) |
 | `chart_app.py` | PySide6/pyqtgraph UI |
 | `chart_cli.py` | Command line of `chart_app.py` and its shell tab completion (argcomplete) |
@@ -33,6 +39,8 @@ run `pip install nautilus_trader-*.whl` first, then install the rest from `requi
 ```bash
 python smoke_test.py      # Engine: market, limit, bracket/OCO, flatten, jump
 python test_sniper.py     # Sniper: setups, trap, fills, stops, BE, trail, partial fill, cancel, scratch
+python test_journal.py    # Trade log detail columns: trap data, targets, exits, manual changes
+python -m pytest test_entrycount_doubletrap.py -q   # EntryCount/DoubleTrap: test cases 1-15 of the C# code
 ```
 Both play constructed ticks through the SimulatedExchange. Run them before every change to
 `replay_engine.py` or `sniper.py`.
@@ -57,7 +65,14 @@ python chart_app.py DAY1.dbn.zst DAY2.dbn.zst --symbol ESH6        # multiple da
 python chart_app.py TRADES.dbn.zst --list                          # list contracts in the file
 python chart_app.py TRADES.dbn.zst --bars tick:2000                # tick bars like the NT chart
 python chart_app.py TRADES.dbn.zst --bars range:6 --atm WADES10,WADES12 --all-buttons
+python chart_app.py --nt-ticks "ES 12-26.Last.txt" --day 2026-10-09 --context-from 2026-10-06   # NT's own ticks
 ```
+**NinjaTrader ticks** (`--nt-ticks`): plays NT's tick export (Historical Data > Export, type Last, time zone UTC)
+instead of Databento. `--day` = CME trading day(s) (session from 17:00 Chicago the evening before; default: the last
+one in the file), `--context-from` = first trading day of the candle context (default: the day before). With
+`--context-from` = the first day the NT chart loaded, bars, EMA and EntryCount labels are the same as in NT:
+verified for ES DEC26 06.-09.10.2026 (all 1736 bars identical, event CSV 100 % equal to NT's). The aggressor side
+comes from bid/ask of the export.
 Local data is stored per day under `..\trading\databento_data\glbx-mdp3-YYYYMMDD.trades.dbn.zst`
 (`--day` builds the path from it, the folder can be changed with `--data-dir`; without `--schema`
 the `.trades` file is used if it exists, else the `.mbo` file)
@@ -124,7 +139,13 @@ not written for synthetic data). One row per position from flat to flat, so an A
 and runner is one row with the average exit. Columns: `Replayed` (wall-clock time of the replay run),
 `Date`, `Open`, `Close` (Europe/Berlin), `Instrument`, `Setup` (`Manual Market`, `Manual Bracket` or the
 Sniper setup with ATM template, e.g. `Smart Short WADES16`), `Side`, `Qty`, `Entry`, `Exit`, `Points`,
-`Ticks`, `PnL` ($), `Duration`. Excel format for a German system: `;` separator, decimal comma, UTF-8 with BOM.
+`Ticks`, `PnL` ($), `Duration`, followed by detail columns (empty when unknown, e.g. a manual entry without trap):
+`SignalBarStart`, `SignalO/H/L/C`, `PrevBarH/L`, `Trigger`, `EntryType` (`Direct`, `PullbackLimit`, `Manual`),
+`LimitPrice`, `InitialSL`, `RiskTicks`, `Template`, `MaxRiskTicks`, `T1Price`, `T2Price` (planned after the fill),
+`ExitT1`, `ExitT1Time`, `ExitRunner`, `ExitRunnerTime`, `RunnerExitReason` (`Target`, `BE`, `Stop`, `Manual`),
+`ManualChanges` (confirmed chart moves, e.g. `T1 7822,50->7823,75 | SL2 7829,25->BE`) and `DistEMA`
+(signal bar close minus EMA 21, points). An existing file with the old short header is kept; the log then goes to
+`trade_log_v2.csv`. Excel format for a German system: `;` separator, decimal comma, UTF-8 with BOM.
 The log below the chart shows a `JOURNAL` line for each trade.
 
 ### Tab completion (zsh)
@@ -194,6 +215,45 @@ are read directly from `Documents\NinjaTrader 8\templates\AtmStrategy\<Name>.xml
   replay, so a day can be traded through for practice.
 
 Parameters: `SniperConfig` in `sniper.py` (defaults as in the NT strategy).
+
+## EntryCount and DoubleTrap (ports of the NT8 indicators)
+`entry_count.py` and `double_trap.py` port `Documents\NinjaTrader 8\bin\Custom\Indicators\EntryCount.cs` and
+`DoubleTrap.cs` one to one (one function per C# method, same order and names, C# line numbers in the comments).
+Doubts about the C# code go to `PORT_NOTES.md`, never into the port. Parameters: `entrycount_doubletrap.toml`
+(same names and defaults as the NinjaScript properties; unknown keys are rejected).
+
+Both run on every closed bar (`Calculate.OnBarClose`) and write the same event CSV as NT
+(`EntryCount_<instrument>_<yyyyMMdd>_CT.csv`, `DoubleTrap_..._CT.csv` in `pa_csv/`; columns, decimal comma and
+formats identical, including the per-bar `Bar` lines). The intrabar order of outside bars (same-bar F2E) comes from
+the ticks in NT's order (ticks with the closing time stamp of a bar count for the next bar), without ticks from the
+bar color, as in NT.
+
+**In the chart** (`chart_app.py`, on by default, `--pa off` to disable, `--pa-config FILE` for another parameter
+file): labels 1EL/2ES…, F (F2E), R:KL/R:2L/R:NX with origin dot, DT ▲/▼, DT?, DT x, entry/stop lines and the trigger
+diamond, in NT's label rows. Switches: `ShowLabels`, `ShowFirstEntries`, `ShowWeak2EMarker`, … in the TOML, plus
+`[ChartTrader] ShowEntryCount / ShowDoubleTrap`. CSV from the chart only with `ExportCsv = true`.
+
+**Whole days from the command line** (always writes the CSVs):
+
+    python pa_run.py --day 2026-10-09 --data-dir PATH --symbol ESZ6          # input A: Databento MBO, tick:2000
+    python pa_run.py --nt-bars "PATH/Bar_Export_ESDEC26_2000 - Tick_2026-10-0*.csv"   # input B: NT bar export
+    python pa_run.py --nt-bars "PATH/NinjaTrader 8/EntryCount_ES_DEC26_2026100[6-9].csv" \
+                     --nt-ticks "PATH/ES 12-26.Last.txt" --config entrycount_doubletrap_nt_chart.toml
+
+Input A loads the previous trading day as warm-up (`--warmup-days N` for more). Input B accepts NT's bar export or
+the `Bar` lines of NT's own EntryCount CSV - the latter are exactly the bars the NT indicator saw and are the input
+for the parity check. Start with the first bar NT loaded, otherwise EMA and counts differ at the beginning.
+`--nt-ticks` takes NT's tick export (Historical Data > Export, Last, UTC) for the intrabar order.
+
+**Parity check**:
+
+    python parity_check.py --day 20261009 [--bars]     # NT files from Documents\NinjaTrader 8, CT files from pa_csv
+    python parity_check.py NT.csv CT.csv
+
+Rows are matched by BarEndTime + Indicator + Event + Direction (numbered when a key repeats); prices must be equal,
+BodyPct/ClosePct/WickPct within 0.5. Prints matches, only-NT, only-CT and every differing column; `--bars` also
+compares the per-bar count and state lines. The NT chart may run with saved parameters that differ from the C#
+defaults: `entrycount_doubletrap_nt_chart.toml` holds the ones found for ES DEC26, 06.-09.10.2026.
 
 ## Known limitations (first version)
 - PnL is in points × the instrument's multiplier. Without a definition file a

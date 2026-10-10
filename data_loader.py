@@ -250,3 +250,54 @@ def synthetic(instrument: Instrument, n: int = 20_000, seed: int = 1, start_px: 
                                Quantity.from_int(rnd.randint(1, 8)), side,
                                TradeId(str(k)), ts, ts))
     return ticks
+
+
+# --------------------------------------------------------------------------- NinjaTrader tick export
+def nt_instrument_from_name(path: str | Path) -> Instrument:
+    """'ES 12-26.Last.txt' -> ES contract Dec 2026 (NT contract name in the file name)."""
+    import re
+    m = re.match(r"(ES) (\d{2})-(\d{2})", Path(path).name)
+    if not m:
+        raise ValueError(f"No ES contract name like 'ES 12-26' in {Path(path).name}")
+    return es_contract(2000 + int(m.group(3)), int(m.group(2)))
+
+
+def load_nt_ticks(path: str | Path, start_ns: int | None = None, end_ns: int | None = None,
+                  instrument: Instrument | None = None) -> tuple[Instrument, list[TradeTick]]:
+    """NinjaTrader tick export (Historical Data > Export, type Last): 'yyyyMMdd HHmmss fffffff;Last;Bid;Ask;Vol',
+    time stamps in UTC (100 ns units). Only ticks in [start_ns, end_ns). One NT tick = one TradeTick.
+    Aggressor from bid/ask (last >= ask: buyer, last <= bid: seller), otherwise from the price direction:
+    the SimulatedExchange derives its book from the aggressor sides."""
+    from datetime import datetime, timezone
+    instrument = instrument or nt_instrument_from_name(path)
+    prec, iid = instrument.price_precision, instrument.id
+    epoch: dict[str, int] = {}
+    ticks: list[TradeTick] = []
+    side, prev, k = AggressorSide.BUYER, None, 0
+    with open(path, encoding="utf-8-sig") as f:
+        for ln in f:
+            if len(ln) < 24:
+                continue
+            d = ln[:8]
+            base = epoch.get(d)
+            if base is None:
+                base = epoch[d] = int(datetime(int(d[:4]), int(d[4:6]), int(d[6:8]),
+                                               tzinfo=timezone.utc).timestamp()) * 1_000_000_000
+            ts = base + (int(ln[9:11]) * 3600 + int(ln[11:13]) * 60 + int(ln[13:15])) * 1_000_000_000 \
+                + int(ln[16:23]) * 100
+            if (start_ns is not None and ts < start_ns) or (end_ns is not None and ts >= end_ns):
+                continue
+            last, bid, ask, vol = ln[24:].rstrip("\r\n").split(";")
+            px, b, a = float(last), float(bid), float(ask)
+            if px >= a:
+                side = AggressorSide.BUYER
+            elif px <= b:
+                side = AggressorSide.SELLER
+            elif prev is not None and px != prev:
+                side = AggressorSide.BUYER if px > prev else AggressorSide.SELLER
+            prev = px
+            k += 1
+            ticks.append(TradeTick(iid, Price(px, prec), Quantity.from_int(max(1, int(vol))), side,
+                                   TradeId(f"NT{k}"), ts, ts))
+    ticks.sort(key=lambda t: t.ts_event)          # stable: the file order stays for equal time stamps
+    return instrument, ticks

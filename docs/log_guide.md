@@ -31,6 +31,11 @@ also möglich und sollten in der Auswertung als Regelverstoß bzw. Übungs-Trade
   („was in the market“). Die Order bleibt wie sie war.
 - `JOURNAL SHORT 3 5967 -> 5956  44 ticks  PnL 1650  (Smart Short WADES16)` – Trade abgeschlossen
   (flat): Richtung, Kontrakte, Einstieg, **Durchschnitts**-Ausstieg, Ticks, PnL in $, Setup.
+- Zeilen, die mit einer Bar-Nummer und `;EntryCount;` bzw. `;DoubleTrap;` beginnen, erscheinen nur mit
+  `DebugLog = true` in `entrycount_doubletrap.toml`: dieselben Ereigniszeilen wie in der NT-CSV (Entry, F2E, Reset,
+  DtCandidate, DtSignal, DtRejected, Weak2E, ThirdEntryInvalid; Spalte `Reason` = Grund).
+- `JOURNAL detail error: …` – Detaildaten für das Trade-Log konnten nicht erfasst werden (Programmfehler);
+  der Trade selbst und seine Log-Zeile sind davon nicht betroffen, nur einzelne Detailspalten fehlen.
 
 **Sniper** (alle mit Präfix `SNIPER`)
 - `ATM switched to WADES16, max risk 15 ticks` – gewählte Vorlage.
@@ -62,6 +67,23 @@ Eine Zeile je Trade von flat zu flat (ATM mit Target1 + Runner = eine Zeile, Exi
 Spalten: `Replayed` (wann ich den Replay gespielt habe) · `Date` · `Open` · `Close` (Berlin-Zeit) ·
 `Instrument` · `Setup` (`Manual Market`, `Manual Bracket` oder z. B. `Smart Short WADES16`) ·
 `Side` · `Qty` · `Entry` · `Exit` · `Points` · `Ticks` · `PnL` ($) · `Duration`.
+Dahinter Detailspalten (leer, wenn ein Wert fehlt, z. B. bei manuellem Einstieg ohne Trap; Preise mit
+2 Nachkommastellen):
+- `SignalBarStart` (Startzeit der Signal-Bar, Berlin) · `SignalO/H/L/C` · `PrevBarH/L` (Vorbar, für den
+  Struktur-Stop) · `Trigger` (H+1T bzw. L−1T) · `EntryType` (`Direct`, `PullbackLimit`, `Manual`;
+  Momentum = `Direct`) · `LimitPrice` (nur bei Pullback) · `InitialSL` (Struktur-Stop beim Armen) ·
+  `RiskTicks` (|Ø-Entry − InitialSL| in Ticks) · `Template` · `MaxRiskTicks`.
+- `T1Price`/`T2Price`: geplante Targets nach dem Fill (Ø-Fill ± Target-Ticks der Vorlage), ohne meine
+  späteren Änderungen. `ExitT1`/`ExitT1Time`: Ø-Preis und Zeit der Target1-Fills.
+  `ExitRunner`/`ExitRunnerTime`: alle übrigen Ausstiege (Runner, Stops, Flatten), Ø-Preis und letzte Zeit.
+- `RunnerExitReason`: wie die Position zuletzt geschlossen wurde – `Target`, `BE` (Stop auf Ø-Entry ± 1 Tick),
+  `Stop`, `Manual` (Flatten/Killswitch/eigene Order). Eine automatische Session-Schließung gibt es im
+  Replay nicht, `SessionEnd` kommt daher nicht vor.
+- `ManualChanges`: meine bestätigten Verschiebungen nach dem Entry, getrennt mit ` | `,
+  z. B. `T1 7822,50->7823,75 | SL2 7829,25->BE` (Scratch zählt nicht dazu).
+- `DistEMA`: Close der Signal-Bar minus EMA 21 (über die Bars des Charts) in Punkten.
+Existiert schon eine Datei mit dem alten kurzen Kopf, bleibt sie unangetastet und das Log geht nach
+`trade_log_v2.csv`.
 
 ## Bekannte Eigenheiten der Simulation
 - Limits füllen, sobald ein Trade den Preis erreicht (keine Queue-Position) → eher optimistisch.

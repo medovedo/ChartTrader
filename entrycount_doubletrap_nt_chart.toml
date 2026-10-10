@@ -1,0 +1,10 @@
+# Parameters of the NT chart instance that wrote EntryCount_ES_DEC26_20261006..09.csv (for the parity check).
+# Only the values that differ from entrycount_doubletrap.toml / the C# defaults; everything else = default.
+# Found from the CSV ("skipped: ... (RequireEqualOrHigherLeg)" on 06.10. bar 7), see PORT_NOTES.md #1.
+#   python pa_run.py --config entrycount_doubletrap_nt_chart.toml --nt-bars ".../EntryCount_ES_DEC26_2026100[6-9].csv"
+
+[EntryCount]
+RequireEqualOrHigherLeg = true
+
+[DoubleTrap]
+RequireEqualOrHigherLeg = true

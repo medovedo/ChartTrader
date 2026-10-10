@@ -62,6 +62,8 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from nautilus_trader.model.enums import OrderSide
 
 from data_loader import load_databento, synthetic
+from entrycount_doubletrap_config import load_config
+from pa_overlay import PaOverlay
 from range_bars import RangeBar, make_aggregator
 from replay_engine import ReplayEngine
 from sniper import SniperConfig
@@ -355,11 +357,12 @@ class _EnterAccepts(QtCore.QObject):
 class ChartTrader(QtWidgets.QMainWindow):
     def __init__(self, instrument, ticks, bars="range:4", ticks_per_step=25, sniper_config=None,
                  bar_width_pct: float = BAR_WIDTH_PCT, ema_period: int = EMA_PERIOD, context_ticks=None,
-                 journal_path: str | None = None):
+                 journal_path: str | None = None, pa_config=None):
         super().__init__()
         self.inc = float(instrument.price_increment)
         self.engine = ReplayEngine(instrument, ticks, agg=make_aggregator(bars, self.inc),
-                                   sniper_config=sniper_config, journal_path=journal_path)
+                                   sniper_config=sniper_config, journal_path=journal_path, pa_config=pa_config)
+        self.pa_config = pa_config
         self.context_ticks = list(context_ticks or [])   # previous day: only for bars/EMA, not through the engine
         self.ema_period = ema_period
         self._ema: list[float] = []
@@ -398,6 +401,7 @@ class ChartTrader(QtWidgets.QMainWindow):
         self.plot.scene().addItem(self.info)     # directly in the scene, position in pixels (see _refresh_info)
         self.plot.scene().addItem(self.bar_box)
         self.scatter = pg.ScatterPlotItem(size=12); self.plot.addItem(self.scatter)
+        self.pa_overlay = PaOverlay(self.plot)     # EntryCount/DoubleTrap labels and lines
         self.last_line = pg.InfiniteLine(angle=0, pen=pg.mkPen("#ffd54f", style=QtCore.Qt.DashLine))
         self.plot.addItem(self.last_line)
         # Horizontal line at the mouse pointer (H), price snapped to the tick; ignores the mouse so that
@@ -593,9 +597,9 @@ class ChartTrader(QtWidgets.QMainWindow):
 
     def _feed_context(self, ticks) -> None:
         """Send ticks only through the aggregator (candles and EMA), not through the engine."""
-        agg = self.agg
+        aggregate = self.engine.strategy.aggregate     # bars plus the EntryCount/DoubleTrap ports
         for t in ticks:
-            agg.update(float(t.price), float(t.size), t.ts_event)
+            aggregate(float(t.price), float(t.size), t.ts_event)
 
     def jump_to(self, dt: datetime):
         """Fast-forwards without engine processing; context candles = previous day (if loaded) + everything up to the target."""
@@ -1112,6 +1116,16 @@ class ChartTrader(QtWidgets.QMainWindow):
             ema_extend(values, [b.close for b in closed] + [self.agg.current.close], self.ema_period)
         self.ema_curve.setData(list(range(start, len(values))), values[start:])
 
+    def _refresh_pa(self, start: int, n: int) -> None:
+        """EntryCount/DoubleTrap objects of the visible bars (switches in entrycount_doubletrap.toml)."""
+        pa = self.engine.pa
+        if pa is None:
+            return
+        ch = self.pa_config.chart
+        sources = ([pa.ec_draw] if ch.ShowEntryCount else []) + ([pa.dt_draw] if ch.ShowDoubleTrap else [])
+        lo, hi = self.plot.plotItem.vb.viewRange()[0]
+        self.pa_overlay.update(sources, max(start, int(lo) - 1), min(n - 1, int(hi) + 1))
+
     def refresh(self):
         bars = self.agg.bars + ([self.agg.current] if self.agg.current else [])
         n = len(bars); start = max(0, n - VISIBLE_BARS)
@@ -1123,6 +1137,7 @@ class ChartTrader(QtWidgets.QMainWindow):
         self._follow_price()
         self._update_drawings()
         self._refresh_marks(n, start)     # after setXRange: needs the current view range
+        self._refresh_pa(start, n)
         self.last_line.setPos(self.engine.last_price)
         self.scatter.setData(
             [{"pos": (x, y), "brush": pg.mkBrush("#26a69a" if s == "BUY" else "#ef5350"),
@@ -1171,10 +1186,64 @@ class ChartTrader(QtWidgets.QMainWindow):
         super().closeEvent(e)
 
 
+def session_start_ns(day) -> int:
+    """Start of the CME session of a trading day: 17:00 Chicago on the evening before."""
+    from datetime import timedelta
+    prev = day - timedelta(days=1)
+    return int(datetime(prev.year, prev.month, prev.day, 17, tzinfo=ZoneInfo("America/Chicago")).timestamp() * 1e9)
+
+
+def last_trading_day_in(path):
+    """CME trading day of the last tick of an NT tick export (reads only the end of the file)."""
+    from datetime import timedelta
+    with open(path, "rb") as f:
+        f.seek(0, 2)
+        f.seek(max(0, f.tell() - 4096))
+        last = f.read().decode("utf-8", "ignore").strip().splitlines()[-1]
+    t = datetime.strptime(last[:15], "%Y%m%d %H%M%S").replace(tzinfo=timezone.utc)
+    return (t.astimezone(ZoneInfo("America/Chicago")) + timedelta(hours=7)).date()
+
+
+def load_nt_replay(args):
+    """--nt-ticks: replay = the CME trading day(s) of --day, context = the trading days before (from --context-from)."""
+    from datetime import date, timedelta
+    from data_loader import load_nt_ticks
+    days = sorted(date.fromisoformat(d) for d in args.day) if args.day else [last_trading_day_in(args.nt_ticks)]
+    if args.context_from:
+        ctx = date.fromisoformat(args.context_from)
+    else:
+        ctx = days[0] - timedelta(days=1)
+        while ctx.weekday() >= 5:                    # Saturday/Sunday: no trading day of their own
+            ctx -= timedelta(days=1)
+    start, ctx_start = session_start_ns(days[0]), session_start_ns(min(ctx, days[0]))
+    end = session_start_ns(days[-1] + timedelta(days=1))
+    print(f"Loading {args.nt_ticks}: trading day(s) {', '.join(map(str, days))}, context from {min(ctx, days[0])} ...")
+    instrument, ticks = load_nt_ticks(args.nt_ticks, ctx_start, end)
+    i = bisect.bisect_left([t.ts_event for t in ticks], start)
+    context, replay = ticks[:i], ticks[i:]
+    if not replay:
+        sys.exit("No ticks for these trading day(s) in the file.")
+    print(f"{instrument.id}: {len(replay)} ticks to replay, {len(context)} context ticks")
+    return instrument, replay, context
+
+
 def main():
     args = build_parser().parse_args()
 
     from data_loader import day_file, previous_day_files
+    if args.nt_ticks:
+        instrument, ticks, context_ticks = load_nt_replay(args)
+        app = QtWidgets.QApplication(sys.argv)
+        pg.setConfigOptions(antialias=True, background="#1e1e1e", foreground="#ddd")
+        cfg = SniperConfig(show_only_smart_buttons=not args.all_buttons)
+        if args.atm:
+            cfg.atm_templates = tuple(a.strip() for a in args.atm.split(",") if a.strip())
+        w = ChartTrader(instrument, ticks, bars=args.bars, sniper_config=cfg, bar_width_pct=args.bar_width,
+                        ema_period=args.ema, context_ticks=context_ticks,
+                        journal_path=None if args.journal == "off" else args.journal,
+                        pa_config=None if args.pa == "off" else load_config(args.pa_config))
+        w.showMaximized()
+        sys.exit(app.exec())
     if args.day:
         args.schema = resolve_schema(args.day[0], args.data_dir, args.schema)
     for day in args.day or []:
@@ -1226,7 +1295,8 @@ def main():
         cfg.atm_templates = tuple(a.strip() for a in args.atm.split(",") if a.strip())
     w = ChartTrader(instrument, ticks, bars=args.bars, sniper_config=cfg, bar_width_pct=args.bar_width,
                     ema_period=args.ema, context_ticks=context_ticks,
-                    journal_path=args.journal if args.trades and args.journal != "off" else None)
+                    journal_path=args.journal if args.trades and args.journal != "off" else None,
+                    pa_config=None if args.pa == "off" else load_config(args.pa_config))
     w.showMaximized()   # fixed 1600x850 didn't fit on 2560 px at 125 % Windows scaling
     sys.exit(app.exec())
 

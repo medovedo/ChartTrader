@@ -70,6 +70,29 @@ bewusste Architekturentscheidung – keine eigene Fill-Simulation bauen.
   aus `PositionClosed`-Events. **NETTING verwendet die Position-ID wieder, `cache.positions_closed()` hält
   nur die letzte** – daher kommen Journal und `state().realized` (`realized_closed`) aus den Events.
   Setup-Name über die öffnende Order: GUI-Tags (`_order_tags`) oder Sniper-Trade (`label` + ATM).
+  Detailspalten (hinten angehängt, alte Spalten unverändert) aus `TradeInfo`: Sniper füllt sie beim Armen
+  (`_trade_info`, hängt an `Trap`/`AtmTrade.info`) und mit den geplanten Targets nach dem Fill; die Strategie
+  ergänzt Exit-Fills (`_journal_exit`, Rolle T1/T2/SL über die Brackets) und bestätigte GUI-Verschiebungen
+  (`_journal_move`). Nautilus aktualisiert die Position **vor** `on_order_filled` (beim letzten Exit schon
+  geschlossen). Datei mit altem Kurz-Header bleibt stehen, Log geht dann nach `*_v2.csv`. Test: `test_journal.py`.
+- `entry_count.py`, `double_trap.py` – 1:1-Port der NT8-Indikatoren `EntryCount.cs`/`DoubleTrap.cs`
+  (`Documents\NinjaTrader 8\bin\Custom\Indicators`, kein Git dort). Aufgabe: `Prompt_Port_EntryCount_DoubleTrap_CT.md`.
+  **Port, keine Verbesserung**: Zweifel am C#-Code nach `PORT_NOTES.md`, nie in den Port; nie den C#-Code für Parität ändern.
+  Je C#-Methode eine Funktion (snake_case), C#-Zeilen im Kommentar. Parameter `entrycount_doubletrap.toml` (NT-Namen
+  und -Defaults). .NET-Framework-Zahlenformat in `pa_support.py`. CSV = vorhandenes NT-Format (36 Spalten, Nutzer-
+  Entscheidung 9.10.2026), Dateien `..._CT.csv` in `pa_csv/`. `pa_runner.PaRunner` füttert Ticks/Bars in NT-Reihenfolge
+  (Tick mit Schlusszeitstempel zählt zur nächsten Bar); im Chart über `ManualStrategy.aggregate` (auch Kontext-Ticks),
+  Neustart beim Sprung, Anzeige `pa_overlay.py` (Items mit `ignoreBounds`, sonst schaukelt die Y-Achse wegen der
+  Pixel-Versätze). `pa_run.py` (Eingabe A Databento, B NT-Bar-Export **oder die Bar-Zeilen der NT-EntryCount-CSV** = exakt
+  NTs Bars; der Bar-Export weicht davon ab), `parity_check.py`. Die NT-Chart-Instanz lief mit gespeichertem
+  `RequireEqualOrHigherLeg = true` (`entrycount_doubletrap_nt_chart.toml`); damit plus NT-Tick-Export
+  (`--nt-ticks "ES 12-26.Last.txt"`; ohne Ticks nur Bar-Farbe → 96,9–99,4 %) **100 % Parität EntryCount 06.–09.10.2026**.
+  DoubleTrap noch ohne NT-CSV. **Chart mit NT-Ticks**: `chart_app.py --nt-ticks "ES 12-26.Last.txt" --day … --context-from …`
+  (`data_loader.load_nt_ticks`, Aggressor aus Bid/Ask; `--day` = CME-Handelstag). `tick:2000` aus NTs Ticks = NTs Bars
+  (1736/1736 identisch); Chart-Lauf (Kontext 06.–08., Replay 09.10.) schreibt mit `ExportCsv` 100 % NT-gleiche CSVs.
+  Tuning-Werkzeuge: `SPEC_EntryCount_DoubleTrap.md` (Regeln EC-1…10), `CHANGELOG_Tuning.md`, `pa_stats.py vorher nachher`.
+  Ausgangswert fürs Tuning `RequireEqualOrHigherLeg = false` (Nutzer, 10.10.2026). Tests: `test_entrycount_doubletrap.py`
+  (pytest, C#-Testfälle 1–15). Tuning erst nach 100 % Parität: SPEC → Code → `CHANGELOG_Tuning.md`.
 - `export_bars.py` – Bars als CSV wie NTs Indikator `TickBarsExporter.cs` (Dateiname
   `Bar_Export_ESMAR25_2000 - Tick_<Datum>.csv`, Zeit = letzter Tick in Berlin, Dezimalkomma, BOM, CRLF,
   nur anhängen). Streamt Vortagsdateien + Tage, Session-Ende ohne Folge-Tick via `agg.end_session()`.
