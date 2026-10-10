@@ -289,8 +289,10 @@ class ManualStrategy(Strategy):
         )
 
     def cancel(self, oid: ClientOrderId) -> None:
+        # Also in flight (SUBMITTED): an order placed in this tick is accepted by the exchange only with the
+        # next one; skipping it here left an expired trap's entry working without the Sniper (12.03.2025).
         o = self.cache.order(oid)
-        if o.is_open:
+        if not o.is_closed and not o.is_pending_cancel:
             self.cancel_order(o)
 
     def close_all(self) -> None:

@@ -21,6 +21,13 @@ def read_events(path: Path) -> list[dict]:
         return [dict(zip(header, ln.rstrip("\r\n").split(";"))) for ln in f if ln.strip()]
 
 
+def reason_kind(reason: str) -> str:
+    """Reason without numbers, e.g. 'ema distance 7T > 2T' -> 'ema distance', 'quality: close 60% < 70%' -> 'quality'."""
+    head = reason.split(":")[0] if reason.startswith(("quality", "trend", "range filter", "rule6", "exhaustion")) else reason
+    words = [w for w in head.replace("(", " ").replace(")", " ").split() if not any(ch.isdigit() for ch in w)]
+    return " ".join(words[:6])
+
+
 def count(rows: list[dict]) -> Counter:
     c: Counter = Counter()
     for r in rows:
@@ -36,13 +43,18 @@ def count(rows: list[dict]) -> Counter:
             c[f"F2E{d}"] += 1
         elif ev == "Reset":
             c[f"Reset {r['Reason'].split(',')[0]} {d}"] += 1
+        elif ev == "DtSignal":
+            c[f"DT {'triggered' if r['Reason'].startswith('entry triggered') else 'signal'} {d}"] += 1
+        elif ev in ("DtRejected", "ThirdEntryInvalid"):
+            c[f"{ev} {d}: {reason_kind(r['Reason'])}"] += 1
         elif ev not in ("Bar", "F2E"):
             c[f"{ev} {d}"] += 1
     return c
 
 
 ORDER = ["1EL", "2EL", "2EL quality ok", "3+EL", "F2EL", "1ES", "2ES", "2ES quality ok", "3+ES", "F2ES",
-         "skipped EL", "skipped ES"]
+         "skipped EL", "skipped ES", "DT signal L", "DT triggered L", "DT signal S", "DT triggered S",
+         "Weak2E L", "Weak2E S"]
 
 
 def collect(folder: Path, indicator: str, days: list[str] | None) -> dict[str, Counter]:
@@ -59,7 +71,8 @@ def table(stats: dict[str, Counter], before: dict[str, Counter] | None = None) -
     keys = [k for k in ORDER if any(k in c for c in stats.values()) or (before and any(k in c for c in before.values()))]
     keys += sorted({k for c in stats.values() for k in c} - set(keys))
     days = sorted(stats)
-    print(f"{'':16}" + "".join(f"{d:>14}" for d in days) + f"{'total':>14}")
+    w = max([16] + [len(k) + 1 for k in keys])
+    print(f"{'':{w}}" + "".join(f"{d:>14}" for d in days) + f"{'total':>14}")
     for k in keys:
         cells = []
         tot_a = tot_b = 0
@@ -76,7 +89,7 @@ def table(stats: dict[str, Counter], before: dict[str, Counter] | None = None) -
             cells.append(f"{tot_b}->{tot_a}" if tot_a != tot_b else str(tot_a))
         else:
             cells.append(str(tot_a))
-        print(f"{k:16}" + "".join(f"{c:>14}" for c in cells))
+        print(f"{k:{w}}" + "".join(f"{c:>14}" for c in cells))
 
 
 def main() -> int:

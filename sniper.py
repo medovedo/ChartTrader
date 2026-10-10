@@ -292,6 +292,7 @@ class AtmTrade:
     entry_price: float = 0.0
     entry_complete: bool = False
     entry_cancel_requested: bool = False
+    expired: bool = False              # entry cancel requested (runway / bars to wait), not yet confirmed
     post_fill_extreme: float = 0.0     # best last price since the fill (partial fill cancel, as in the original)
     unprotected_warned: bool = False
     position_seen: bool = False
@@ -556,18 +557,20 @@ class Sniper:
             filled = [v for v in views if v.filled_qty > 0]
             if filled:
                 t.entry_price = filled[0].avg_px
-                self._log(f"{t.label} filled @ {t.entry_price}")
+                self._log(f"{t.label} filled @ {t.entry_price}" + (" (after the cancel request)" if t.expired else ""))
+            elif t.expired:
+                # Keep tracking until the exchange confirms the cancel: a fill before that still gets the
+                # structural stop and the management instead of the template's bracket stop
+                return all(v.is_closed for v in views)
             else:
                 run = (b0.high - t.trigger) / tick if t.is_long else (t.trigger - b0.low) / tick
                 if run >= self.cfg.max_runway_ticks:
                     self._log(f"{t.label} EXPIRED: price ran {self.cfg.max_runway_ticks} ticks past trigger. Cancelling.")
-                    self._cancel_trade(t)
-                    return True
+                    return self._expire(t)
                 if self.cur >= t.setup_bar + self.cfg.bars_to_wait:
                     self._log(f"{t.label} EXPIRED: allowed bars exceeded (current {self.cur}, setup {t.setup_bar}, "
                               f"allowed {self.cfg.bars_to_wait}). Cancelling.")
-                    self._cancel_trade(t)
-                    return True
+                    return self._expire(t)
                 return False
 
         open_qty = self._open_qty(t)
@@ -724,6 +727,11 @@ class Sniper:
                         t.stop1_adjusted = t.stop_notified = True
                 elif br.tp == oid:
                     br.targets_aligned = True
+
+    def _expire(self, t: AtmTrade) -> bool:
+        t.expired = True
+        self._cancel_trade(t)
+        return all(self.b.order_view(br.entry).is_closed for br in t.brackets)
 
     def _cancel_trade(self, t: AtmTrade) -> None:
         for br in t.brackets:

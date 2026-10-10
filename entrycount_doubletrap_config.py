@@ -120,6 +120,9 @@ class DoubleTrapConfig:
     DtMaxBarsAfterF2E: int = 10
     DtAllowF2EBarAsSignal: bool = True
     BlockTooLarge: bool = False
+    # Tuning (not in DoubleTrap.cs yet, see SPEC/CHANGELOG)
+    DtSignalBarIsCorrectionExtreme: bool = False    # DT-a: the signal bar is the low (long) / high (short) of the correction
+    DtRequireEntryStopsHit: bool = False            # DT-b: correction extreme reaches the structural stops of 1E and 2E
     # Weak 2E
     UseWeakEmaGap: bool = True
     EmaGapTicks: int = 4

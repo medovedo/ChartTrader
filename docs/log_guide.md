@@ -46,7 +46,7 @@ also möglich und sollten in der Auswertung als Regelverstoß bzw. Übungs-Trade
 - `Smart …: Limit 3 @ L (WADES16), intended SL S` – Entry-Orders liegen im Markt.
 - `… trap expired (bar closed without trigger)` – Trigger in der Bar nicht erreicht, verfallen.
 - `… EXPIRED: price ran N ticks past trigger` / `allowed bars exceeded` – ungefüllte Entry storniert.
-- `… filled @ P` – Einstiegspreis. `STRUCTURAL SL: secured at S` – Stops auf den Struktur-Stop gesetzt.
+- `… filled @ P` – Einstiegspreis; mit `(after the cancel request)` kam der Fill noch vor der Storno-Bestätigung, der Trade wird trotzdem normal verwaltet. `STRUCTURAL SL: secured at S` – Stops auf den Struktur-Stop gesetzt.
 - `PARTIAL FILL: rest of entry cancelled (10 ticks run)` – Teilfill, Rest storniert, weil der Kurs seit
   dem Fill 10 Ticks gelaufen ist; `Bracket|Runner N contract(s): new stop S, target T` – neue Exits dafür.
 - `AUTO-BE: Stop2 moved to P` – Target1 gefüllt → Runner-Stop auf Einstand.

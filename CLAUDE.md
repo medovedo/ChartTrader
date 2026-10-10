@@ -93,7 +93,9 @@ bewusste Architekturentscheidung – keine eigene Fill-Simulation bauen.
   Tuning-Werkzeuge: `SPEC_EntryCount_DoubleTrap.md` (Regeln EC-1…10), `CHANGELOG_Tuning.md`, `pa_stats.py vorher nachher`.
   Ausgangswert fürs Tuning `RequireEqualOrHigherLeg = false` (Nutzer, 10.10.2026). Tuning-Änderungen im Port sind mit
   „tuning EC-n“ markiert und noch nicht in den .cs-Dateien (Schritt 4): Nr. 1 = EC-11 `PauseCountAfterCounterTrendF2E`
-  (Default aus; nur EntryCount, nicht das von DoubleTrap gehostete). Chart-Panel rechts: Anzeige-Schalter (nur Filter,
+  (Default aus; nur EntryCount, nicht das von DoubleTrap gehostete). DT wird im CT getunt und danach nach C# übertragen
+  (Nutzer 10.10.2026, ohne NT-Parität für DT): Nr. 3 DT-a `DtSignalBarIsCorrectionExtreme`, Nr. 4 DT-b
+  `DtRequireEntryStopsHit` (Wade Regel 5, beide Default aus). Wades Regeln W1–W5 stehen in der SPEC. Chart-Panel rechts: Anzeige-Schalter (nur Filter,
   Indikatoren zeichnen im Chart alles, `PaRunner(draw_all=True)`). Tests: `test_entrycount_doubletrap.py`
   (pytest, C#-Testfälle 1–15). Tuning erst nach 100 % Parität: SPEC → Code → `CHANGELOG_Tuning.md`.
 - `export_bars.py` – Bars als CSV wie NTs Indikator `TickBarsExporter.cs` (Dateiname

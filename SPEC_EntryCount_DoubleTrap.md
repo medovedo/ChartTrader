@@ -119,5 +119,65 @@ InsideBarAsSignal true · PauseCountAfterCounterTrendF2E **true** im CT (neu, EC
 ---
 
 ## DoubleTrap
-Noch nicht getunt, Parität offen (keine NT-CSV). Verhalten = `DoubleTrap.cs`, Regeln werden vor dem DT-Tuning
-hier ergänzt.
+
+**Vorgehen (Nutzer, 10.10.2026):** DT wird im CT getunt und danach nach C# übertragen. Die NT-Parität des DT-Ports
+wurde nicht geprüft (keine NT-CSV); abgesichert durch die Testfälle 10–15. Ausgangsstand = `DoubleTrap.cs`.
+DoubleTrap hostet ein eigenes EntryCount mit den DT-Parametern (EC-11 dort nicht aktiv).
+
+### Ziel: Regeln nach Thomas Wade
+- **W1 Kontext**: Der Markt spricht insgesamt noch für den Haupttrend.
+- **W2 Erster Trap**: Ein Second Entry mit dem Trend (2EL/2ES) bildet sich und scheitert an schlechten Bedingungen
+  (z. B. weit weg von der EMA, in Kongestion, schwache Signal-Bar, blockiert durch eine aktive kurzfristige Trendlinie).
+- **W3 Zweiter Trap**: Gegentrend-Trader werden gefangen, die den gescheiterten 2E (F2EL/F2ES) gegen den Trend handeln.
+- **W4 Signal-Bar**: nah an der EMA (nicht weit weg). Bullischer DT: Close **über** der EMA; bärischer: **unter**.
+- **W5 Strukturelles Extrem**: Die neue Signal-Bar stoppt den ersten und zweiten Trend-Entry aus und ist das
+  absolute Tief (Long) bzw. Hoch (Short) der laufenden Korrektur.
+
+### Ausgangsstand (C#), Long beschrieben, Short gespiegelt
+- **DT-1 Ablauf je Richtung**: 2EL (rohes Ereignis, unabhängig von Resets) → warten auf F2EL → Signal-Bar suchen
+  (auch die F2E-Bar selbst, `DtAllowF2EBarAsSignal`) → Signal: Entry = Hoch + 1 Tick, wartet → ausgelöst, sobald ein
+  Hoch den Entry erreicht (Raute), oder verworfen bei einem neuen Korrektur-Tief unter der Signal-Bar (dann
+  wieder Signal-Bar suchen). F2E auf der 2E-Bar selbst (Outside-Bar) zählt sofort.
+- **DT-2 Start**: Der 2EL muss **mit dem Trend** sein (EMA-Trend +1 auf der 2E-Bar), sonst `DtRejected` „not with
+  trend“. Der 1EL derselben Zählung (zwischen Pullback-Start und 2E) liefert das 1E-Signal-Bar-Tief.
+- **DT-3 Weak 2E** (nur Info, Label DT?, `RequireWeak2E` = false): a) 2E-Signal-Bar > `EmaGapTicks` (4) über der
+  EMA; b) Kongestion: mittlere Überlappung der letzten `CongestionLookback` (6) Bars ≥ 60 % oder Spanne < 12 Ticks;
+  c) Signal-Bar besteht Regel 5 nicht; d) Gegenstruktur intakt: seit dem höchsten Hoch zwischen 1E-Trigger und
+  2E-Signal-Bar kein Close darüber.
+- **DT-4 Verfall**: neues Hoch über dem Pullback-Start (Ursprung der Zählung) oder mehr als `DtMaxBarsAfterF2E`
+  (10) Bars nach dem F2E ohne Signal.
+- **DT-5 Korrektur-Tief**: tiefstes Tief seit dem 2E-Trigger; „Gegenbewegung“, sobald danach eine Bar das Hoch der
+  Vorbar bricht.
+- **DT-6 Prüfung der Signal-Bar** (Reihenfolge): EMA fällt → nein · EMA flach und ≥ `RangeCrossCount` (4) Closes über/
+  unter der EMA in `RangeLookback` (30) Bars → nein (Range) · Regel 6 (aus) · Exhaustion (Trendbruch + neues Hoch) →
+  nein · Korrektur-Tief unter dem 1E- **und** 2E-Signal-Bar-Tief · Bar im Extrem-Bein (ist das Tief oder keine
+  Gegenbewegung seither) · keine Inside-Bar · Tief höchstens `DtEmaToleranceTicks` (2) über der EMA · Close über der
+  EMA (sonst „DT x“ / ThirdEntryInvalid) · Regel 5 ok · optional RequireWeak2E, BlockTooLarge.
+- **DT-7 Signal**: ▲ DT unter der Bar (Zeile 2), Entry-/Stop-Linie bis zur Auslösung, Stop = Struktur-Stop
+  (Signal-Bar und Vorbar − 1 Tick), Risiko-Klasse wie EC-6.
+
+### Abgleich mit Wade (Stand 10.10.2026)
+| Wade | Code | Lücke | Vorschlag |
+|---|---|---|---|
+| W1 | DT-2, DT-6 (Trend, Range, Exhaustion) | – | – |
+| W2 | DT-3 nur Info | schlechte Bedingungen nicht Pflicht; keine echte Trendlinie | **DT-c** RequireWeak2E; **DT-d** Trendlinien-Kriterium |
+| W3 | DT-1 | Trend beim F2E nicht geprüft | **DT-e** F2E noch im Trend |
+| W4 | DT-6 (EMA-Nähe, Close) | – | – |
+| W5 | DT-6 (unter Signal-Bar-Tiefs, Extrem-Bein) | Signal-Bar muss nicht selbst das Tief sein; geprüft gegen Signal-Bar-Tiefs statt Stops | **DT-a** Signal-Bar = Korrektur-Tief; **DT-b** unter die Struktur-Stops von 1E/2E |
+| – | Regel 5 der Signal-Bar, Verfall nach 10 Bars | zusätzlich zu Wade | offen |
+
+### DT-a Signal-Bar ist das Korrektur-Extrem (neu, CHANGELOG Nr. 3, 10.10.2026)
+Parameter `DtSignalBarIsCorrectionExtreme` (DoubleTrap, Default false = C#). Eingeschaltet ersetzt er in DT-6 die
+Bedingung „Bar im Extrem-Bein“: Das Tief der Signal-Bar muss das Korrektur-Tief seit dem 2E-Trigger sein
+(gleich tief zählt, ± halber Tick); Short: Hoch = Korrektur-Hoch. Sonst `DtRejected` „bar is not the correction low“.
+
+### DT-b 1E und 2E ausgestoppt (neu, CHANGELOG Nr. 4, 10.10.2026)
+Parameter `DtRequireEntryStopsHit` (DoubleTrap, Default false = C#). Eingeschaltet wird in DT-6 das Korrektur-Tief
+nicht mit den Signal-Bar-Tiefs von 1E/2E verglichen, sondern mit deren Struktur-Stops (EntryCount `LongStop`/
+`ShortStop` beim jeweiligen Entry, EC-6): Korrektur-Tief ≤ 1E-Stop (wenn der 1E zur Folge gehört) und ≤ 2E-Stop;
+Short: Korrektur-Hoch ≥ Stops. Sonst `DtRejected` „no new low at/below the 1EL/2EL stop (Preis)“.
+
+### Ausgangszahlen DT (06.–09.10.2026, NT-Bars + NT-Ticks, `pa_csv/ec11_pause`)
+2 Signale in 4 Tagen (1 Long am 07.10., ausgelöst; 1 Short am 08.10., nicht ausgelöst). Häufigste Ablehnung:
+2E nicht mit dem Trend (Long 68, Short 77), danach Range-Filter (19/5), Verfall durch neues Extrem (16/11),
+Trend gegen die Richtung an der Signal-Bar (6/12), kein neues Extrem unter dem 2E (3/10).

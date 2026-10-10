@@ -307,7 +307,22 @@ def main() -> int:
     h.run_to(23)
     check(len(h.sn.trades) == 1 and len(h.open_orders()) == 2, f"Limit entries waiting: {h.open_orders()}")
     h.run_to(31)                                    # 104.75 = trigger + 10 ticks
+    check(any("EXPIRED: price ran" in e for e in h.events()), "Runway: expired at trigger + 10 ticks")
+    h.run_to(32)                                    # the exchange confirms the cancel with the next tick
     check(not h.sn.trades and not h.open_orders() and h.net() == 0, f"Runway cancel: open={h.open_orders()}")
+
+    # ---------- 4b. Runway already exceeded when the trap fires: the cancel hits an order still in flight ----------
+    # (12.03.2025: the entry stayed working after "EXPIRED ... Cancelling", filled on the pullback and kept
+    # the template's bracket stop instead of the structural stop)
+    LATE = [102.25, 103.00, 103.75, 104.75, 104.50, 104.00, 103.00, 102.00, 101.00, 100.50]
+    h = Harness(BAR_A_LOW + BAR_B + LATE + [100.25, 100.00] + [99.75] * 8 + FLAT)
+    h.run_to(24)                                    # Bar[0] high 104.75 = trigger + 10 ticks
+    check(h.sn.arm_smart(True) and h.sn.trap.limit == 100.50, f"Late trap armed: {h.sn.trap}")
+    h.run_to(25)
+    check(any("EXPIRED: price ran" in e for e in h.events()), "Late trap: expired in the tick it fired")
+    h.run_to(45)                                    # price falls through the limit 100.50
+    check(not h.sn.trades and not h.open_orders() and h.net() == 0,
+          f"Late trap: entry cancelled, no fill on the pullback: open={h.open_orders()} net={h.net()}")
 
     # ---------- 5. Bars to Wait: limit stays unfilled, 3 bars -> cancel ----------
     WAIT = [102.00, 102.25, 102.50, 102.25, 102.00, 102.25, 102.50, 102.25, 102.00, 102.25]
@@ -317,6 +332,8 @@ def main() -> int:
     h.run_to(50)                                    # bar 4 forming, still allowed
     check(len(h.sn.trades) == 1 and len(h.open_orders()) == 2, "Still active after 2 bars")
     h.run_to(51)                                    # first tick of bar 5 = setup + 3
+    check(any("EXPIRED: allowed bars" in e for e in h.events()), "Bars to Wait: expired after 3 bars")
+    h.run_to(52)                                    # cancel confirmed with the next tick
     check(not h.sn.trades and not h.open_orders(), "Bars-to-Wait cancel after 3 bars")
 
     # ---------- 6. Scratch: targets to entry + 2 ticks ----------

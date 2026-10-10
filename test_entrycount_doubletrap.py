@@ -376,3 +376,38 @@ def test_ec11_mirror_long_count_after_f2el_in_downtrend():
     assert [e["BarNo"] for e in events(ev, "CountPaused", "Long")] == ["19"]
     assert [e["BarNo"] for e in events(ev, "CountResumed", "Long")] == ["25"]
     assert [b for b, _, _ in entries(ev, "Long")] == [15, 18]
+
+
+# --------------------------------------------------------------------------- tuning DT-a / DT-b (CHANGELOG Nr. 3, 4)
+def test_dta_signal_bar_must_be_the_correction_low():
+    """DT-a: a bar after the correction low (no counter move since) is a signal only with the option off."""
+    x = (124.50, 126.25, 123.75, 123.75)          # new correction low, closes below the EMA (DT x)
+    z = (124.50, 125.50, 124.50, 125.00)          # inside bar of x
+    y = (124.00, 125.50, 124.00, 125.25)          # higher low than x, no break of z's high (no counter move): bullish
+    rows = long_dt_base() + [x, z, y]
+    _, ev = run_dt(rows)
+    assert [int(e["BarNo"]) for e in events(ev, "DtSignal", "Long")] == [len(rows)]
+    _, ev = run_dt(rows, DtSignalBarIsCorrectionExtreme=True)
+    assert not events(ev, "DtSignal")
+    rej = [e for e in events(ev, "DtRejected", "Long") if int(e["BarNo"]) == len(rows)]
+    assert [e["Reason"] for e in rej] == [f"bar is not the correction low (123.75 @bar {len(rows) - 2})"]
+    _, ev = run_dt(long_dt_base() + [LONG_SIGNAL_BAR], DtSignalBarIsCorrectionExtreme=True)
+    assert events(ev, "DtSignal", "Long")                 # the signal bar is the low itself: still a signal
+
+
+def test_dtb_correction_must_reach_the_entry_stops():
+    """DT-b: below the 2E signal bar low is not enough, the correction low must reach the 2E stop."""
+    rows = long_dt_base() + [LONG_SIGNAL_BAR]
+    for on in (False, True):
+        lines: list[str] = []
+        dt = DoubleTrap(DoubleTrapConfig(DebugLog=True, DtRequireEntryStopsHit=on), printer=lines.append)
+        for b in bars_of(rows):
+            dt.on_bar_update(b)
+        s = dt.longSide
+        assert s.SeqFirstStop == 127.50 and s.SecondStop == 125.75      # min(signal low, prev low) - 1 tick
+        s.Stage, s.SecondStop, s.CorrExt, s.CorrExtBar = 2, 125.00, 125.50, dt.CurrentBar   # below 126, above 125
+        s.SeqFirstExt, s.SeqFirstStop = float("nan"), float("nan")
+        n = len(lines)
+        dt.evaluate_candidate(s, dt.ema(0), 1, False)
+        reasons = [e["Reason"] for e in parse(lines[n:]) if e["Event"] == "DtRejected"]
+        assert any(r.startswith("no new low at/beyond the 2EL stop (125)") for r in reasons) == on

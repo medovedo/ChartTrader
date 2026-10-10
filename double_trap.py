@@ -53,6 +53,9 @@ class DtSide:
         # Last 1E reported by EntryCount (condition 3 and weak criterion d)
         self.FirstSignalExt = NAN
         self.FirstTriggerBar = -1
+        self.FirstStop = NAN               # tuning DT-b: structural stop of that 1E
+        self.SeqFirstStop = NAN            # tuning DT-b: 1E stop of the running sequence
+        self.SecondStop = 0.0              # tuning DT-b: structural stop of the 2E
         self.LastSeenSecondBar = -1
         # Sequence 2E -> F2E -> signal bar
         self.Stage = 0
@@ -228,6 +231,7 @@ class DoubleTrap:
         if entry_event == 1:
             s.FirstSignalExt = ec.longSignalLow if is_long else ec.shortSignalHigh
             s.FirstTriggerBar = cb
+            s.FirstStop = ec.longStop if is_long else ec.shortStop          # tuning DT-b
 
         # Pending signal from an earlier bar: entry triggered, or cancelled by a new correction extreme.
         if s.Stage == StagePending and cb > s.SigBar:
@@ -310,6 +314,8 @@ class DoubleTrap:
 
         # The 1E of the same count must lie between the pullback start and this 2E.
         s.SeqFirstExt = s.FirstSignalExt if s.PullStartBar < s.FirstTriggerBar < cb else NAN
+        s.SeqFirstStop = s.FirstStop if s.PullStartBar < s.FirstTriggerBar < cb else NAN      # tuning DT-b
+        s.SecondStop = ec.longStop if is_long else ec.shortStop                              # tuning DT-b
 
         s.CorrExt = b0.low if is_long else b0.high
         s.CorrExtBar = cb
@@ -405,6 +411,10 @@ class DoubleTrap:
         # port of DoubleTrap.AppendReason, lines 607-610
         return add if current is None else current + ", " + add
 
+    def _stop_hit(self, is_long: bool, extreme: float, stop: float) -> bool:
+        """Tuning DT-b: a stop is hit when price trades at it (long stop below: low <= stop)."""
+        return extreme <= stop + self.halfTick * 0.5 if is_long else extreme >= stop - self.halfTick * 0.5
+
     def expire_sequence(self, s: DtSide, ema0: float, reason: str) -> None:
         # port of DoubleTrap.ExpireSequence, lines 612-616
         s.Stage = StageIdle
@@ -435,11 +445,29 @@ class DoubleTrap:
         # Condition 3: new correction extreme beyond the 1E and 2E signal bars, and bar t belongs to that leg
         if reason is None:
             lsl = "L" if is_long else "S"
-            if s.SeqFirstExt == s.SeqFirstExt and not (s.CorrExt < s.SeqFirstExt - half if is_long
-                                                       else s.CorrExt > s.SeqFirstExt + half):
+            low_high = "low" if is_long else "high"
+            b0 = self._bar(0)
+            if cfg.DtRequireEntryStopsHit:
+                # tuning DT-b: the correction extreme must reach the structural stops of the 1E and the 2E
+                if s.SeqFirstStop == s.SeqFirstStop and not self._stop_hit(is_long, s.CorrExt, s.SeqFirstStop):
+                    reason = f"no new {low_high} at/beyond the 1E{lsl} stop ({net_g(s.SeqFirstStop)})"
+                elif not self._stop_hit(is_long, s.CorrExt, s.SecondStop):
+                    reason = f"no new {low_high} at/beyond the 2E{lsl} stop ({net_g(s.SecondStop)})"
+            elif s.SeqFirstExt == s.SeqFirstExt and not (s.CorrExt < s.SeqFirstExt - half if is_long
+                                                         else s.CorrExt > s.SeqFirstExt + half):
                 reason = f"no new {'low' if is_long else 'high'} beyond 1E{lsl} signal bar ({net_g(s.SeqFirstExt)})"
             elif not (s.CorrExt < s.SecondSigLow - half if is_long else s.CorrExt > s.SecondSigHigh + half):
                 reason = f"no new {'low' if is_long else 'high'} beyond 2E{lsl} signal bar"
+            if reason is not None:
+                pass
+            elif cfg.DtSignalBarIsCorrectionExtreme:
+                # tuning DT-a: the signal bar itself is the correction extreme (equal extreme counts)
+                if not (b0.low <= s.CorrExt + half if is_long else b0.high >= s.CorrExt - half):
+                    reason = f"bar is not the correction {low_high} ({net_g(s.CorrExt)} @bar {self.barNumbering.get(s.CorrExtBar)})"
+                elif inside:
+                    reason = "inside bar"
+                else:
+                    structure_ok = True
             elif s.CorrExtBar != self.CurrentBar and s.CounterBreakSinceCorr:
                 reason = "bar is not in the extreme leg of the correction"
             elif inside:
