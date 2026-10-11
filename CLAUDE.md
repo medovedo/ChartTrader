@@ -57,6 +57,9 @@ bewusste Architekturentscheidung – keine eigene Fill-Simulation bauen.
   `ChartTrader.settings()` nach `chart_settings.json` (`--settings`, gitignored), `_apply_settings` lädt beim Start,
   Button "Restore settings" (`restore_settings`) jederzeit wieder
   (ungültige Einträge werden übersprungen; `--bar-width` schlägt den gespeicherten Wert, daher CLI-Default None).
+  `refresh()` läuft nach jeder Taste: X-Bereich nur bei neuer Bar/Zoom (`_view_key`), `_follow_price` nur bei
+  geändertem Kurs (`_followed_px`) – sonst springt eine von Hand verschobene Ansicht zurück (R, Sprung, Restore setzen zurück).
+  Trendlinie mit Shift = waagerecht (`_draw_end`, Vorschau folgt Shift-Druck/-Loslassen im Event-Filter).
   Zeichenobjekte (`self.drawings`): `TrendLine` und `TextNote` (Taste A) teilen eine Schnittstelle
   (`hit`, `update`, `set_selected`, `coords`, `drag_to`, `clone`, `remove`); Auswahl, Ziehen, Shift+Ziehen,
   Strg+C, Entf laufen generisch. pyqtgraph meldet einen Doppelklick erst beim Loslassen (headless: nach

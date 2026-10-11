@@ -8,11 +8,11 @@ Controls
   N             Single step (one range bar)
   Mouse wheel   more / fewer visible bars
   Ctrl+wheel    compress / stretch price axis (also Ctrl + vertical drag)
-  R             Price axis back to auto
+  R             Price axis back to auto, undoes a pan (hotkeys keep a panned view)
   H             Horizontal line at the mouse pointer with price label on/off (default on)
   Hover a bar   info box: time from-to, open/high/low/close, volume, size in ticks, duration
   T             Trend line: two left clicks = line (preview follows the mouse), then the
-                mode is off again; right click/Esc cancels. Click selects a line, dragging moves
+                mode is off again; Shift held = horizontal line; right click/Esc cancels. Click selects a line, dragging moves
                 it (at an endpoint: only the point), Shift+drag drags a copy, Ctrl+C copies
                 the selected line, Del deletes it (without selection the last one), Shift+Del all
   A             Text: the dialog opens at once; Enter places the text at the mouse pointer (Shift+Enter =
@@ -405,6 +405,8 @@ class ChartTrader(QtWidgets.QMainWindow):
         self.bar_box.setZValue(1001)
         self.bar_box.setVisible(False)
         self._hover_pos = None          # last mouse position in the chart (scene), None = outside
+        self._view_key = None           # (bars, view_bars) of the last setXRange: keys keep a panned view
+        self._followed_px = None        # last price _follow_price looked at
         self.plot.scene().addItem(self.info)     # directly in the scene, position in pixels (see _refresh_info)
         self.plot.scene().addItem(self.bar_box)
         self.scatter = pg.ScatterPlotItem(size=12); self.plot.addItem(self.scatter)
@@ -545,6 +547,7 @@ class ChartTrader(QtWidgets.QMainWindow):
     def _apply_settings(self, s: dict) -> None:
         """Saved values over the defaults; unknown or invalid entries are skipped."""
         self._saved_window = s.get("window")
+        self._view_key = self._followed_px = None     # view back to the newest bar and the price
         for box, key in ((self.qty, "qty"), (self.tgt, "target_ticks"), (self.stp, "stop_ticks")):
             if isinstance(s.get(key), int):
                 box.setValue(s[key])
@@ -810,6 +813,7 @@ class ChartTrader(QtWidgets.QMainWindow):
         self.engine.skip_to(idx)
         self.log.appendPlainText(f"Jumped to {dt.strftime('%Y-%m-%d %H:%M %Z')} (tick {idx})")
         self._play(self.ticks_per_step)
+        self._view_key = self._followed_px = None     # new position: view back to the price
         self._sync_clock(); self._drain_events(); self.refresh()
 
     # --- Orders -------------------------------------------------------------
@@ -974,8 +978,18 @@ class ChartTrader(QtWidgets.QMainWindow):
             self.cursor_line.setPos(self._view_point(pos)[1])
         self.cursor_line.setVisible(self.cursor_on and inside)
         if self.draw_mode and self.draw_start is not None and self.plot.sceneBoundingRect().contains(pos):
-            x, y = self._view_point(pos)
-            self.preview.setData([self.draw_start[0], x], [self.draw_start[1], y])
+            self._update_preview(pos)
+
+    def _draw_end(self, scene_pos, shift: bool) -> tuple[float, float]:
+        """Second point of a trend line; Shift held = horizontal (price of the start point)."""
+        x, y = self._view_point(scene_pos)
+        return (x, self.draw_start[1]) if shift else (x, y)
+
+    def _update_preview(self, scene_pos, shift: bool | None = None):
+        if shift is None:
+            shift = bool(QtWidgets.QApplication.keyboardModifiers() & QtCore.Qt.ShiftModifier)
+        x, y = self._draw_end(scene_pos, shift)
+        self.preview.setData([self.draw_start[0], x], [self.draw_start[1], y])
 
     def add_trendline(self, x1: float, y1: float, x2: float, y2: float) -> TrendLine | None:
         if (x1, y1) == (x2, y2):
@@ -1104,11 +1118,11 @@ class ChartTrader(QtWidgets.QMainWindow):
         self.plot.setFocus()   # keyboard (Ctrl+C, Del, hotkeys) then belongs to the chart, not an input field
         if self.draw_mode:
             if ev.button() == QtCore.Qt.LeftButton:
-                x, y = self._view_point(ev.scenePos())
                 if self.draw_start is None:
-                    self.draw_start = (x, y)
+                    self.draw_start = self._view_point(ev.scenePos())
                 else:
-                    self.add_trendline(*self.draw_start, x, y)
+                    shift = bool(ev.modifiers() & QtCore.Qt.ShiftModifier)
+                    self.add_trendline(*self.draw_start, *self._draw_end(ev.scenePos(), shift))
                     self.toggle_draw(False)   # like NinjaTrader: back to normal mode after one line
             elif ev.button() == QtCore.Qt.RightButton:
                 self.toggle_draw(False)
@@ -1127,6 +1141,10 @@ class ChartTrader(QtWidgets.QMainWindow):
         # moves the focus on arrow keys and clicks on Space, a combo box switches its entry. Only
         # text inputs (quantity/ticks fields, date) keep their keys; what they don't use reaches
         # keyPressEvent. Dialogs and popups are other windows and are left alone.
+        if (ev.type() in (QtCore.QEvent.KeyPress, QtCore.QEvent.KeyRelease) and ev.key() == QtCore.Qt.Key_Shift
+                and self.draw_mode and self.draw_start is not None and self._hover_pos is not None):
+            # Shift pressed/released while drawing: preview snaps to horizontal and back without a mouse move
+            self._update_preview(self._hover_pos, ev.type() == QtCore.QEvent.KeyPress)
         if (ev.type() == QtCore.QEvent.KeyPress and isinstance(obj, QtWidgets.QWidget)
                 and obj.window() is self and not self._is_text_input(obj) and self._handle_key(ev)):
             return True
@@ -1208,15 +1226,18 @@ class ChartTrader(QtWidgets.QMainWindow):
 
     def reset_y(self):
         self.y_span = None
+        self._view_key = None       # also undoes a horizontal pan
         self.plot.plotItem.vb.enableAutoRange(axis="y", enable=True)
 
     def _follow_price(self):
-        """With fixed height: pull the view along once the last price reaches the 15 % margin."""
-        if self.y_span is None:
+        """With fixed height: pull the view along once the last price reaches the 15 % margin.
+        Only when the price changed: a refresh from a hotkey keeps a view panned by hand."""
+        px = self.engine.last_price
+        if self.y_span is None or px == self._followed_px:
             return
+        self._followed_px = px
         vb = self.plot.plotItem.vb
         lo, hi = vb.viewRange()[1]
-        px = self.engine.last_price
         band = 0.15 * (hi - lo)
         if not (lo + band <= px <= hi - band):
             vb.setYRange(px - self.y_span / 2, px + self.y_span / 2, padding=0)
@@ -1314,8 +1335,10 @@ class ChartTrader(QtWidgets.QMainWindow):
         self.candles.set_bars(bars[start:], start, self.width_box.value())
         self._refresh_ema(bars, start)
         self._refresh_info()
-        right = (n - 1) + self.view_bars * RIGHT_MARGIN     # newest bar at 90 % of the width, also at startup
-        self.plot.setXRange(right - self.view_bars, right, padding=0)
+        if (n, self.view_bars) != self._view_key:     # new bar or zoom; otherwise keep a view panned by hand
+            self._view_key = (n, self.view_bars)
+            right = (n - 1) + self.view_bars * RIGHT_MARGIN     # newest bar at 90 % of the width, also at startup
+            self.plot.setXRange(right - self.view_bars, right, padding=0)
         self._follow_price()
         self._update_drawings()
         self._refresh_marks(n, start)     # after setXRange: needs the current view range
