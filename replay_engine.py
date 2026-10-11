@@ -45,6 +45,7 @@ class ManualStrategy(Strategy):
         self.instrument: Instrument | None = None
         self.events: list[str] = []
         self.agg = None                 # set by ReplayEngine
+        self.htf_ema = None             # HigherEma (e.g. EMA 21 of 10000-tick bars), set by ReplayEngine
         self.sniper: Sniper | None = None
         self._manual_moves: dict[ClientOrderId, float] = {}   # GUI moves waiting for confirmation -> old price
         self.journal = None                 # TradeJournal, set by ReplayEngine (optional)
@@ -68,6 +69,8 @@ class ManualStrategy(Strategy):
     def aggregate(self, price: float, size: float, ts: int) -> None:
         """Bars and the bar-close indicators; also used for context ticks that do not go through the engine."""
         closed = self.agg.update(price, size, ts)
+        if self.htf_ema is not None:
+            self.htf_ema.update(price, size, ts, closed)
         if self.pa is not None:
             self.pa.on_tick(price, ts, closed)
 
@@ -329,7 +332,7 @@ class ReplayEngine:
     def __init__(self, instrument: Instrument, ticks: list[TradeTick],
                  starting_balance: float = 50_000.0, agg=None,
                  sniper_config: SniperConfig | None = None, enable_sniper: bool = True,
-                 journal_path: str | None = None, pa_config=None):
+                 journal_path: str | None = None, pa_config=None, htf_ema=None):
         self.instrument = instrument
         self.pa_config = pa_config          # PaConfig: EntryCount/DoubleTrap ports run on every closed bar
         self.ticks = ticks
@@ -351,6 +354,7 @@ class ReplayEngine:
         self.strategy = ManualStrategy(ManualStrategyConfig(instrument_id=str(instrument.id)))
         tick_size = float(instrument.price_increment)
         self.strategy.agg = agg if agg is not None else RangeBarAggregator(tick_size=tick_size, range_ticks=4)
+        self.strategy.htf_ema = htf_ema
         if enable_sniper:
             self.strategy.sniper = Sniper(self.strategy, tick_size, sniper_config)
         if journal_path:
@@ -364,6 +368,10 @@ class ReplayEngine:
     @property
     def agg(self):
         return self.strategy.agg
+
+    @property
+    def htf_ema(self):
+        return self.strategy.htf_ema
 
     @property
     def sniper(self) -> Sniper | None:
@@ -387,6 +395,8 @@ class ReplayEngine:
         """Install an empty aggregator of the same kind (before a jump); the trap is discarded,
         the EntryCount/DoubleTrap ports start over (they are fed again with the context bars)."""
         self.strategy.agg = self.strategy.agg.fresh()
+        if self.strategy.htf_ema is not None:
+            self.strategy.htf_ema = self.strategy.htf_ema.fresh()
         if self.strategy.pa is not None:
             self.strategy.pa.finish()
             self.strategy.pa = self._new_pa()

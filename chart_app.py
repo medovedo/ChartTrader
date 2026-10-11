@@ -42,6 +42,7 @@ Start:  python chart_app.py                                  -> synthetic data
                   --list  (show contracts and exit)
                   --bar-width 50 (body width in % of bar spacing, also in the "Width %" field)
                   --ema 21 (period of the EMA line, 0 = off)
+                  --htf-ema tick:10000:21 (red EMA of a higher bar series, BARS:PERIOD; off = none)
                   --day loads the previous day automatically as context (all candles before the jump target),
                   --context FILE does that for a file path
 """
@@ -55,7 +56,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from chart_cli import BAR_WIDTH_PCT, EMA_PERIOD, autocomplete, build_parser, resolve_schema
+from chart_cli import BAR_WIDTH_PCT, EMA_PERIOD, HTF_EMA, autocomplete, build_parser, resolve_schema
 autocomplete()   # Tab completion of the shell: answers and exits before the heavy imports below
 
 import pyqtgraph as pg
@@ -65,7 +66,7 @@ from nautilus_trader.model.enums import OrderSide
 from data_loader import load_databento, synthetic
 from entrycount_doubletrap_config import load_config
 from pa_overlay import PaOverlay
-from range_bars import RangeBar, make_aggregator
+from range_bars import HigherEma, RangeBar, make_aggregator
 from replay_engine import ReplayEngine
 from sniper import SniperConfig
 
@@ -158,6 +159,16 @@ def atr_extend(values: list[float], bars, period: int) -> None:
             values.append(sum(trs) / period)
         else:
             values.append((values[-1] * (period - 1) + tr) / period)
+
+
+def parse_htf_ema(spec: str | None, tick_size: float) -> HigherEma | None:
+    """'tick:10000:21' -> HigherEma (EMA 21 of 10000-tick bars); None or 'off' -> None."""
+    if not spec or spec == "off":
+        return None
+    bars, _, period = spec.rpartition(":")
+    if not bars or not period.isdigit() or int(period) <= 0:
+        raise ValueError(f"--htf-ema '{spec}': expected BARS:PERIOD, e.g. tick:10000:21")
+    return HigherEma(bars, int(period), tick_size)
 
 
 def ema_extend(values: list[float], closes: list[float], period: int) -> None:
@@ -358,9 +369,10 @@ class _EnterAccepts(QtCore.QObject):
 class ChartTrader(QtWidgets.QMainWindow):
     def __init__(self, instrument, ticks, bars="range:4", ticks_per_step=25, sniper_config=None,
                  bar_width_pct: float | None = None, ema_period: int = EMA_PERIOD, context_ticks=None,
-                 journal_path: str | None = None, pa_config=None, settings_path: str | None = None):
+                 journal_path: str | None = None, pa_config=None, settings_path: str | None = None,
+                 htf_ema: str | None = HTF_EMA):
         """bar_width_pct None = saved setting, else BAR_WIDTH_PCT. settings_path = JSON of the "Save settings"
-        button, loaded at start (None = no saved settings)."""
+        button, loaded at start (None = no saved settings). htf_ema = 'BARS:PERIOD' of the red EMA, None = none."""
         super().__init__()
         self.settings_path = Path(settings_path) if settings_path else None
         saved = self._load_settings()
@@ -368,7 +380,8 @@ class ChartTrader(QtWidgets.QMainWindow):
             bar_width_pct = saved.get("bar_width_pct", BAR_WIDTH_PCT)
         self.inc = float(instrument.price_increment)
         self.engine = ReplayEngine(instrument, ticks, agg=make_aggregator(bars, self.inc),
-                                   sniper_config=sniper_config, journal_path=journal_path, pa_config=pa_config)
+                                   sniper_config=sniper_config, journal_path=journal_path, pa_config=pa_config,
+                                   htf_ema=parse_htf_ema(htf_ema, self.inc))
         self.pa_config = pa_config
         self.context_ticks = list(context_ticks or [])   # previous day: only for bars/EMA, not through the engine
         self.ema_period = ema_period
@@ -394,6 +407,7 @@ class ChartTrader(QtWidgets.QMainWindow):
         self.plot.showGrid(x=False, y=True, alpha=0.2)
         self.candles = CandleItem(); self.plot.addItem(self.candles)
         self.ema_curve = pg.PlotCurveItem(pen=pg.mkPen("#ffa726", width=2)); self.plot.addItem(self.ema_curve)
+        self.htf_curve = pg.PlotCurveItem(pen=pg.mkPen("#ef5350", width=2)); self.plot.addItem(self.htf_curve)
         # Info bottom right (like CandleSizeTickCounter in NT): ticks to next candle, candle sizes, ATR
         self.info = pg.TextItem(anchor=(1, 1), color="#ddd", fill=pg.mkBrush(30, 30, 30, 160))
         self.info.setFont(QtGui.QFont("Segoe UI", 11))
@@ -1322,6 +1336,14 @@ class ChartTrader(QtWidgets.QMainWindow):
             ema_extend(values, [b.close for b in closed] + [self.agg.current.close], self.ema_period)
         self.ema_curve.setData(list(range(start, len(values))), values[start:])
 
+    def _refresh_htf_ema(self, start: int) -> None:
+        """Red EMA of the higher bar series: one value per chart bar (computed in the strategy)."""
+        h = self.engine.htf_ema
+        if h is None:
+            return
+        values = h.values[start:] + ([h.current] if self.agg.current is not None and h.current is not None else [])
+        self.htf_curve.setData(list(range(start, start + len(values))), values)
+
     def _refresh_pa(self, start: int, n: int) -> None:
         """EntryCount/DoubleTrap objects of the visible bars (switches in entrycount_doubletrap.toml)."""
         pa = self.engine.pa
@@ -1334,6 +1356,7 @@ class ChartTrader(QtWidgets.QMainWindow):
         n = len(bars); start = max(0, n - VISIBLE_BARS)
         self.candles.set_bars(bars[start:], start, self.width_box.value())
         self._refresh_ema(bars, start)
+        self._refresh_htf_ema(start)
         self._refresh_info()
         if (n, self.view_bars) != self._view_key:     # new bar or zoom; otherwise keep a view panned by hand
             self._view_key = (n, self.view_bars)
@@ -1444,7 +1467,7 @@ def main():
         if args.atm:
             cfg.atm_templates = tuple(a.strip() for a in args.atm.split(",") if a.strip())
         w = ChartTrader(instrument, ticks, bars=args.bars, sniper_config=cfg, bar_width_pct=args.bar_width,
-                        ema_period=args.ema, context_ticks=context_ticks,
+                        ema_period=args.ema, context_ticks=context_ticks, htf_ema=args.htf_ema,
                         journal_path=None if args.journal == "off" else args.journal,
                         pa_config=None if args.pa == "off" else load_config(args.pa_config),
                         settings_path=None if args.settings == "off" else args.settings)
@@ -1500,7 +1523,7 @@ def main():
     if args.atm:
         cfg.atm_templates = tuple(a.strip() for a in args.atm.split(",") if a.strip())
     w = ChartTrader(instrument, ticks, bars=args.bars, sniper_config=cfg, bar_width_pct=args.bar_width,
-                    ema_period=args.ema, context_ticks=context_ticks,
+                    ema_period=args.ema, context_ticks=context_ticks, htf_ema=args.htf_ema,
                     journal_path=args.journal if args.trades and args.journal != "off" else None,
                     pa_config=None if args.pa == "off" else load_config(args.pa_config),
                     settings_path=None if args.settings == "off" else args.settings)

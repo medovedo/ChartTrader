@@ -15,6 +15,7 @@ DATA_DIR = Path.home() / "Desktop" / "trading" / "databento_data"   # location o
 SETTINGS_FILE = "chart_settings.json"      # display/order settings of the window ("Save settings" button)
 BAR_WIDTH_PCT = 50                         # body width in percent of bar spacing (initial; changeable via field/--bar-width)
 EMA_PERIOD = 21                            # EMA line on bar closes (0 = off)
+HTF_EMA = "tick:10000:21"                  # red EMA of a higher bar series, BARS:PERIOD (NT 10K chart with EMA 21)
 SCHEMAS = ("trades", "mbo")
 BAR_SUGGESTIONS = ("tick:2000", "range:4", "range:6", "range:8", "vol:2000")
 
@@ -149,6 +150,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--bar-width", type=float, default=None,
                     help="Body width in %% of bar spacing (default: saved setting, else 50)")
     ap.add_argument("--ema", type=int, default=EMA_PERIOD, help="EMA period on bar closes, 0 = off (default 21)")
+    ap.add_argument("--htf-ema", default=HTF_EMA,
+                    help=f"red EMA of a higher bar series as BARS:PERIOD, e.g. tick:10000:21 or range:16:21; "
+                         f"'off' = none (default {HTF_EMA})")
     ap.add_argument("--context", help="DBN file of the previous day, only as candle context (automatic with --day)"
                     ).completer = dbn_files
     ap.add_argument("--list", action="store_true", help="Show contracts per file and exit")

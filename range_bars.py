@@ -276,3 +276,44 @@ def make_aggregator(spec: str, tick_size: float):
     if kind in ("vol", "volume") and n > 0:
         return VolumeBarAggregator(tick_size=tick_size, contracts_per_bar=n)
     raise ValueError(f"Unknown bar spec '{spec}' (expected range:N, tick:N or vol:N)")
+
+
+class HigherEma:
+    """EMA of a higher bar series (e.g. 21 on tick:10000) sampled at the closes of the chart bars.
+
+    A second aggregator runs on the same trades. The value of a chart bar is the EMA as of its last trade,
+    the running higher bar counting with its close so far (on a tick:2000 chart every 5th value is the exact
+    EMA of a closed 10000-tick bar). `values` is aligned with the chart's closed bars, `current` belongs to
+    the running chart bar.
+    """
+
+    def __init__(self, spec: str, period: int, tick_size: float):
+        self.spec, self.period, self.tick_size = spec, period, tick_size
+        self.agg = make_aggregator(spec, tick_size)
+        self.k = 2.0 / (period + 1)
+        self.ema: float | None = None       # EMA over the closed higher bars
+        self.values: list[float] = []
+
+    def fresh(self) -> "HigherEma":
+        return HigherEma(self.spec, self.period, self.tick_size)
+
+    @property
+    def label(self) -> str:
+        return f"EMA {self.period} ({self.agg.label})"
+
+    @property
+    def current(self) -> float | None:
+        cur = self.agg.current
+        if cur is None:
+            return self.ema
+        return cur.close if self.ema is None else self.ema + self.k * (cur.close - self.ema)
+
+    def update(self, price: float, size: float, ts: int, chart_closed: list) -> None:
+        """One trade; chart_closed = the chart bars this trade closed (from the chart aggregator)."""
+        # Chart bars closed by a session change ended with the previous trade: value before this trade
+        before = self.current if any(b.ts_close < ts for b in chart_closed) else None
+        for b in self.agg.update(price, size, ts):
+            self.ema = b.close if self.ema is None else self.ema + self.k * (b.close - self.ema)
+        for b in chart_closed:
+            v = before if b.ts_close < ts else self.current
+            self.values.append(v if v is not None else b.close)

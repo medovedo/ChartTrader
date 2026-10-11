@@ -52,7 +52,8 @@ bewusste Architekturentscheidung – keine eigene Fill-Simulation bauen.
   sind eigene Fenster. Startfokus liegt auf dem Chart. Nach N, Sprung und Pause
   `_sync_clock()` aufrufen, sonst holt die Uhr nach. "Springe zu" = bisect auf `engine.ts_index`,
   Aggregator zurücksetzen, `context_ticks` (Vortag, via `--day` automatisch) + alle Ticks bis zum
-  Ziel nur durch den Aggregator, dann `engine.skip_to`. EMA (`--ema`, Cache `_ema` je Aggregator)
+  Ziel nur durch den Aggregator, dann `engine.skip_to`. EMA (`--ema`, Cache `_ema` je Aggregator; rote EMA eines höheren Bar-Typs `--htf-ema tick:10000:21` =
+  `range_bars.HigherEma` in `ManualStrategy.aggregate`, eigener Aggregator, Wert je Chart-Bar beim Schluss, neu beim Sprung)
   und Körperbreite (`--bar-width`, Feld "Width") sind Anzeigeoptionen. Button "Save settings" schreibt
   `ChartTrader.settings()` nach `chart_settings.json` (`--settings`, gitignored), `_apply_settings` lädt beim Start,
   Button "Restore settings" (`restore_settings`) jederzeit wieder
