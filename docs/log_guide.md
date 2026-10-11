@@ -20,6 +20,8 @@ also möglich und sollten in der Auswertung als Regelverstoß bzw. Übungs-Trade
 ## Meldungen
 **Replay/Chart**
 - `Jumped to 2025-01-02 15:30 CET (tick N)` – Sprung zu Datum/Uhrzeit; Start der Session-Auswertung.
+- `Settings saved to …` / `Settings restored from …` / `No saved settings yet` – Buttons „Save settings“ /
+  „Restore settings“ (Anzeige- und Ordereinstellungen des Fensters, keine Handelsdaten).
 - `Order moved A -> B (effective on the next tick)` – **ich** habe eine Stop-/Target-Linie von Hand gezogen.
 - `Text '…' at P (bar N)`, `Trend line A -> B (bars N..M)` – meine Markierungen im Chart; der Text
   sagt oft, was ich gesehen habe (z. B. `new high`, `OS`).

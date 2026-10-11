@@ -34,3 +34,6 @@ nt
 
 # NT tick exports (Historical Data > Export), large
 *.Last.txt
+
+# Chart window settings ("Save settings" button), per machine
+chart_settings.json

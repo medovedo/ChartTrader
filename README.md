@@ -127,6 +127,13 @@ Careful with `--out` into NT's export folder: the file names are the same as NT'
 Check the cost beforehand: `python fetch_databento.py 2025-09-22 2025-09-23 ESZ5 --schema mbo --cost-only`
 (requires `DATABENTO_API_KEY`). MBO days are considerably larger than trades days.
 Candle body width via `--bar-width 50` (percent of bar spacing) or live in the "Width" field.
+
+**Save settings** (button in the bottom bar) writes the window settings to `chart_settings.json` in the working
+directory (`--settings PATH`, `--settings off` = none): body width, zoom (visible bars), price axis height (fixed
+height after mouse-wheel scaling, `null` = automatic), Qty/Target/Stop, time zone, speed, crosshair, ATM template,
+the EntryCount/DoubleTrap display switches and the window size. They are loaded at every start and with the
+**Restore settings** button (back to the saved state after changes); an explicit
+`--bar-width` overrides the saved width. Data, bar type and EMA period stay command-line options.
 EMA line via `--ema 21` (0 = off), orange, on bar closes including the running bar.
 With `--day`, the previous trading day is loaded automatically as context (Sunday and holiday
 files, which only hold the evening Globex reopen, are included and searched past): its candles are in the chart from the start, and "Jump to" shows all

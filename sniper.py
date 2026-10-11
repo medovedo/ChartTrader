@@ -353,6 +353,14 @@ class Sniper:
         self._log(f"ATM switched to {self.atm_name}, max risk {self.max_risk} ticks")
         return self.atm_name
 
+    def select_atm(self, name: str) -> bool:
+        """Select a template of the list by name (saved chart settings); False if it is not in the list."""
+        if name not in self.cfg.atm_templates:
+            return False
+        self.atm_index = self.cfg.atm_templates.index(name)
+        self.max_risk = max_risk_from_name(self.atm_name, self.cfg.default_max_risk_ticks)
+        return True
+
     def _template(self, no_runner: bool) -> AtmTemplate | None:
         name = self.atm_name + self.cfg.no_runner_suffix if no_runner else self.atm_name
         try:

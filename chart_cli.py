@@ -12,6 +12,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 DATA_DIR = Path.home() / "Desktop" / "trading" / "databento_data"   # location of the daily files for --day
+SETTINGS_FILE = "chart_settings.json"      # display/order settings of the window ("Save settings" button)
 BAR_WIDTH_PCT = 50                         # body width in percent of bar spacing (initial; changeable via field/--bar-width)
 EMA_PERIOD = 21                            # EMA line on bar closes (0 = off)
 SCHEMAS = ("trades", "mbo")
@@ -145,7 +146,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="ATM templates, comma-separated (default: WADES12,WADES10,WADES14,WADES16,WADES8,WADES6)"
                     ).completer = complete_atm
     ap.add_argument("--all-buttons", action="store_true", help="Also show Deep and Momentum buttons")
-    ap.add_argument("--bar-width", type=float, default=BAR_WIDTH_PCT, help="Body width in %% of bar spacing (default 50)")
+    ap.add_argument("--bar-width", type=float, default=None,
+                    help="Body width in %% of bar spacing (default: saved setting, else 50)")
     ap.add_argument("--ema", type=int, default=EMA_PERIOD, help="EMA period on bar closes, 0 = off (default 21)")
     ap.add_argument("--context", help="DBN file of the previous day, only as candle context (automatic with --day)"
                     ).completer = dbn_files
@@ -162,6 +164,9 @@ def build_parser() -> argparse.ArgumentParser:
                          "use the first day NT loaded to get the same EMA and entry counts as the NT chart)")
     ap.add_argument("--pa", choices=["on", "off"], default="on",
                     help="EntryCount/DoubleTrap ports on every closed bar, with labels in the chart (default on)")
+    ap.add_argument("--settings", default=SETTINGS_FILE,
+                    help=f"chart settings saved with the 'Save settings' button, loaded at start (default {SETTINGS_FILE}; "
+                         "'off' = none)").completer = FilesCompleter(("json",))
     ap.add_argument("--pa-config", default=None,
                     help="parameter file of the EntryCount/DoubleTrap ports (default entrycount_doubletrap.toml)"
                     ).completer = FilesCompleter(("toml",))

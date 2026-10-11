@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import sys
 import bisect
+import json
 import time
 from pathlib import Path
 from datetime import datetime, timezone
@@ -356,9 +357,15 @@ class _EnterAccepts(QtCore.QObject):
 
 class ChartTrader(QtWidgets.QMainWindow):
     def __init__(self, instrument, ticks, bars="range:4", ticks_per_step=25, sniper_config=None,
-                 bar_width_pct: float = BAR_WIDTH_PCT, ema_period: int = EMA_PERIOD, context_ticks=None,
-                 journal_path: str | None = None, pa_config=None):
+                 bar_width_pct: float | None = None, ema_period: int = EMA_PERIOD, context_ticks=None,
+                 journal_path: str | None = None, pa_config=None, settings_path: str | None = None):
+        """bar_width_pct None = saved setting, else BAR_WIDTH_PCT. settings_path = JSON of the "Save settings"
+        button, loaded at start (None = no saved settings)."""
         super().__init__()
+        self.settings_path = Path(settings_path) if settings_path else None
+        saved = self._load_settings()
+        if bar_width_pct is None:
+            bar_width_pct = saved.get("bar_width_pct", BAR_WIDTH_PCT)
         self.inc = float(instrument.price_increment)
         self.engine = ReplayEngine(instrument, ticks, agg=make_aggregator(bars, self.inc),
                                    sniper_config=sniper_config, journal_path=journal_path, pa_config=pa_config)
@@ -463,6 +470,13 @@ class ChartTrader(QtWidgets.QMainWindow):
         self.cursor_btn = QtWidgets.QPushButton("Crosshair (H)"); self.cursor_btn.setCheckable(True)
         self.cursor_btn.setChecked(True)
         self.cursor_btn.clicked.connect(self.toggle_cursor_line); bar.addWidget(self.cursor_btn)
+        save = QtWidgets.QPushButton("Save settings"); save.clicked.connect(self.save_settings)
+        save.setToolTip("Save bar width, zoom, price axis height, order fields, time zone, speed, ATM, display\n"
+                        "switches and window size; loaded at the next start")
+        bar.addWidget(save)
+        restore = QtWidgets.QPushButton("Restore settings"); restore.clicked.connect(self.restore_settings)
+        restore.setToolTip("Go back to the settings saved with 'Save settings'")
+        bar.addWidget(restore)
         bar.addSpacing(20); bar.addWidget(QtWidgets.QLabel("Jump to"))
         self.jump_dt = QtWidgets.QDateTimeEdit(); self.jump_dt.setDisplayFormat("yyyy-MM-dd HH:mm")
         self.jump_dt.setCalendarPopup(True)
@@ -487,6 +501,110 @@ class ChartTrader(QtWidgets.QMainWindow):
         self._feed_context(self.context_ticks)   # previous day as candles before the first replay bar
         self._play(self.ticks_per_step)  # create first bar
         self._sync_clock(); self._drain_events(); self.refresh()
+        self._apply_settings(saved)
+
+    # --- Saved settings ("Save settings" button) ---------------------------------
+    def settings(self) -> dict:
+        """Everything the user can set in the window (not the data, bar type or EMA period of the start)."""
+        sn = self.sniper
+        return {
+            "bar_width_pct": self.width_box.value(),
+            "view_bars": self.view_bars,
+            "y_span": self.y_span,                  # price axis height in points, None = automatic
+            "qty": self.qty.value(),
+            "target_ticks": self.tgt.value(),
+            "stop_ticks": self.stp.value(),
+            "time_zone": self.jump_tz.currentText(),
+            "speed": self.speed,
+            "crosshair": self.cursor_on,
+            "atm": sn.atm_name if sn is not None else None,
+            "pa_show": dict(getattr(self, "pa_show", {})),
+            "window": bytes(self.saveGeometry().toHex()).decode(),
+        }
+
+    def save_settings(self) -> None:
+        if self.settings_path is None:
+            self.log.appendPlainText("Settings not saved: started with --settings off.")
+            return
+        try:
+            self.settings_path.write_text(json.dumps(self.settings(), indent=2), encoding="utf-8")
+            self.log.appendPlainText(f"Settings saved to {self.settings_path}")
+        except OSError as e:
+            self.log.appendPlainText(f"Settings not saved: {e}")
+
+    def _load_settings(self) -> dict:
+        if self.settings_path is None or not self.settings_path.exists():
+            return {}
+        try:
+            s = json.loads(self.settings_path.read_text(encoding="utf-8"))
+            return s if isinstance(s, dict) else {}
+        except (OSError, ValueError) as e:
+            print(f"Settings ignored ({self.settings_path}): {e}")
+            return {}
+
+    def _apply_settings(self, s: dict) -> None:
+        """Saved values over the defaults; unknown or invalid entries are skipped."""
+        self._saved_window = s.get("window")
+        for box, key in ((self.qty, "qty"), (self.tgt, "target_ticks"), (self.stp, "stop_ticks")):
+            if isinstance(s.get(key), int):
+                box.setValue(s[key])
+        if s.get("time_zone") in [self.jump_tz.itemText(i) for i in range(self.jump_tz.count())]:
+            self.jump_tz.setCurrentText(s["time_zone"])
+        if s.get("speed") in SPEEDS:
+            self.speed_idx = SPEEDS.index(s["speed"])
+        if isinstance(s.get("crosshair"), bool):
+            self.cursor_on = s["crosshair"]
+            self.cursor_btn.setChecked(self.cursor_on)
+        if s.get("atm") and self.sniper is not None:
+            self.sniper.select_atm(s["atm"])
+        for key, on in (s.get("pa_show") or {}).items():
+            if key in getattr(self, "pa_boxes", {}) and isinstance(on, bool):
+                self.pa_boxes[key].setChecked(on)
+        if isinstance(s.get("view_bars"), int):
+            self.view_bars = int(min(VISIBLE_BARS, max(20, s["view_bars"])))
+        span = s.get("y_span")
+        if isinstance(span, (int, float)) and span > 0:
+            self.y_span = float(span)
+            px = self.engine.last_price
+            vb = self.plot.plotItem.vb
+            vb.enableAutoRange(axis="y", enable=False)
+            vb.setYRange(px - self.y_span / 2, px + self.y_span / 2, padding=0)
+        self.refresh()
+
+    def restore_settings(self) -> None:
+        """Button: back to the saved settings, including bar width, automatic price axis and window size."""
+        if self.settings_path is None:
+            self.log.appendPlainText("Settings not restored: started with --settings off.")
+            return
+        if not self.settings_path.exists():
+            self.log.appendPlainText(f"No saved settings yet ({self.settings_path}).")
+            return
+        s = self._load_settings()
+        if not s:
+            self.log.appendPlainText(f"Settings not restored: {self.settings_path} is not readable.")
+            return
+        if isinstance(s.get("bar_width_pct"), (int, float)):
+            self.width_box.setValue(int(s["bar_width_pct"]))
+        if "y_span" in s and s["y_span"] is None:
+            self.reset_y()
+        self._apply_settings(s)
+        if self._saved_window:
+            try:
+                self.restoreGeometry(QtCore.QByteArray.fromHex(self._saved_window.encode()))
+            except (TypeError, ValueError, AttributeError):
+                pass
+        self.log.appendPlainText(f"Settings restored from {self.settings_path}")
+
+    def show_window(self) -> None:
+        """Saved window size and position, otherwise maximized."""
+        if self._saved_window:
+            try:
+                if self.restoreGeometry(QtCore.QByteArray.fromHex(self._saved_window.encode())):
+                    self.show()
+                    return
+            except (TypeError, ValueError, AttributeError):
+                pass
+        self.showMaximized()
 
     # --- Sniper panel (replica of the WPF buttons from LotsenhofSniper) --------------
     @property
@@ -554,6 +672,7 @@ class ChartTrader(QtWidgets.QMainWindow):
         panel = QtWidgets.QWidget(); col = QtWidgets.QVBoxLayout(panel)
         col.setContentsMargins(4, 8, 4, 4)
         self.pa_show: dict[str, bool] = {}
+        self.pa_boxes: dict[str, QtWidgets.QCheckBox] = {}
         for title, items in groups:
             box = QtWidgets.QGroupBox(title); lay = QtWidgets.QVBoxLayout(box); lay.setSpacing(2)
             for key, text, on in items:
@@ -561,6 +680,7 @@ class ChartTrader(QtWidgets.QMainWindow):
                 cb.setFocusPolicy(QtCore.Qt.NoFocus)          # hotkeys stay with the chart
                 self.pa_show[key] = bool(on)
                 cb.toggled.connect(lambda v, k=key: self._set_pa_show(k, v))
+                self.pa_boxes[key] = cb
                 if key in ("ec", "dt"):
                     f = cb.font(); f.setBold(True); cb.setFont(f)
                 lay.addWidget(cb)
@@ -1303,8 +1423,9 @@ def main():
         w = ChartTrader(instrument, ticks, bars=args.bars, sniper_config=cfg, bar_width_pct=args.bar_width,
                         ema_period=args.ema, context_ticks=context_ticks,
                         journal_path=None if args.journal == "off" else args.journal,
-                        pa_config=None if args.pa == "off" else load_config(args.pa_config))
-        w.showMaximized()
+                        pa_config=None if args.pa == "off" else load_config(args.pa_config),
+                        settings_path=None if args.settings == "off" else args.settings)
+        w.show_window()
         sys.exit(app.exec())
     if args.day:
         args.schema = resolve_schema(args.day[0], args.data_dir, args.schema)
@@ -1358,8 +1479,9 @@ def main():
     w = ChartTrader(instrument, ticks, bars=args.bars, sniper_config=cfg, bar_width_pct=args.bar_width,
                     ema_period=args.ema, context_ticks=context_ticks,
                     journal_path=args.journal if args.trades and args.journal != "off" else None,
-                    pa_config=None if args.pa == "off" else load_config(args.pa_config))
-    w.showMaximized()   # fixed 1600x850 didn't fit on 2560 px at 125 % Windows scaling
+                    pa_config=None if args.pa == "off" else load_config(args.pa_config),
+                    settings_path=None if args.settings == "off" else args.settings)
+    w.show_window()     # saved size, else maximized (fixed 1600x850 didn't fit on 2560 px at 125 % Windows scaling)
     sys.exit(app.exec())
 
 
