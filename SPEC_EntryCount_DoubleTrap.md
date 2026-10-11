@@ -76,6 +76,12 @@ Struktur; Limit = Stop ± 15 Ticks), sonst TooLarge.
   flache EMA → kein Reset. Nur bei **neuem** Kontakt (Vorbar ohne Kontakt). Läuft **vor** der Zählung der Bar und
   behält das laufende Bein: ein Entry auf der Kontakt-Bar ist der 1E der neuen Zählung. Wartet die Zählung bei
   Kontakt noch am Ursprung, wird nur der Ursprung verschoben.
+  **Im CT aus** (`ResetOnKeyLevel = false`, CHANGELOG Nr. 6, Nutzer 11.10.2026): „Hat die Long-Zählung ein Hoch über
+  der EMA als Ursprung und läuft der Kurs darunter, wird weiter auf EL gezählt bis zum F2EL oder bis zu einem Hoch
+  über dem Ursprung; Short gespiegelt.“ Als eigene Bedingung (kein Reset, solange der Ursprung jenseits der EMA
+  liegt) gemessen, entfiel damit jeder Key-Level-Reset (60 an 06.–09.10.2026, 49 an 20./21.03.2025; CSVs
+  byte-gleich mit `false`): der Ursprung liegt bei einem EMA-Kontakt praktisch immer jenseits der EMA.
+  Beispiel 21.03.2025: 1EL Bar 110, EMA-Kontakt Bar 111 setzte die Long-Zählung zurück → Bar 120 war 1EL statt 2EL.
 - **b Zwei Beine** (`ResetAfterTwoLegs`): nach einem F2E → Zähler 0, neuer Ursprung = Extrem seit dem 2E-Trigger.
 - **d Neues Extrem** (`ResetOnNewExtreme`): Bruch über den Ursprung (Long: Hoch > Ursprungs-Hoch) → Zähler 0,
   neuer Ursprung = diese Bar; F2E-Beobachtung endet.
@@ -121,7 +127,7 @@ EmaPeriod 21 · KeyLevelToleranceTicks 2 · SwingStrength 2 · UseSwingSR false 
 SrToleranceTicks 2 · UseTrendlines false · OutsideBarPolicy BothSides · EmaSlopeLookback 5 · MinEmaSlopeTicks 2 ·
 MinBodyPct 45 · MinClosePct 70 · MaxBreakoutWickPct 25 · UseRejectionException true · RejectionMinClosePct 90 ·
 RejectionMaxWickPct 10 · StopMode SignalAndPrevBar · RiskTemplateTicks 16 · RiskToleranceTicks 2 · MaxPullbackPct 49 ·
-RequireEqualOrHigherLeg **false** (entschieden 10.10.2026; der NT-Chart lief mit true) · ResetOnKeyLevel true ·
+RequireEqualOrHigherLeg **false** (entschieden 10.10.2026; der NT-Chart lief mit true) · ResetOnKeyLevel true (**im CT false**, CHANGELOG Nr. 6) ·
 ResetScope CounterTrendOnly · ResetAfterTwoLegs true · ResetOnNewExtreme true · FailedEntryMode PriorBarBreak ·
 InsideBarAsSignal true · PauseCountAfterCounterTrendF2E **true** im CT (neu, EC-11; Code-Default false) ·
 F2EWatchUntil2EOrigin **true** im CT (neu, EC-12; Code-Default false)

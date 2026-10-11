@@ -208,7 +208,8 @@ Verarbeitung je geschlossener Bar, keine Vorausschau. „Bruch“ = mindestens 1
     aus den Ticks).
 - **EC-8 Resets**:
   - a/c Key Level: neuer Kontakt mit der EMA ± 2 Ticks, nur für die Zählung gegen den EMA-Trend; vor der Zählung
-    der Bar.
+    der Bar. **Im CT aus** (C#: an): eine Long-Zählung von einem Hoch über der EMA läuft durch die EMA weiter bis
+    zum F2EL oder einem Hoch über dem Ursprung (Short gespiegelt).
   - b zwei Beine: nach F2E Zähler 0, Ursprung = Extrem seit dem 2E-Trigger.
   - d neues Extrem: Bruch über den Ursprung → Zähler 0, Ursprung = diese Bar; beendet die F2E-Beobachtung
     (mit EC-12 nur beim Bruch des Ursprungs, aus dem der 2E gezählt wurde).

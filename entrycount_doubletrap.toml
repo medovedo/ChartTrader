@@ -29,7 +29,8 @@ RiskToleranceTicks = 2
 MaxPullbackPct = 49.0
 # 4. Counting / reset
 RequireEqualOrHigherLeg = false
-ResetOnKeyLevel = true
+ResetOnKeyLevel = false                # CHANGELOG Nr. 6 (11.10.2026): a long count from a high above the EMA runs
+                                       # through the EMA until its F2EL or a new high (short mirrored); C#: true
 ResetScope = "CounterTrendOnly"         # CounterTrendOnly | Both
 ResetAfterTwoLegs = true
 ResetOnNewExtreme = true
