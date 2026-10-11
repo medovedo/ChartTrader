@@ -8,9 +8,10 @@ Tick bar: closes after `ticks_per_bar` trades; the next bar opens with the
 following trade (`current` is None in between).
 
 Trading day: at the CME session start (17:00 Chicago) the running bar is closed,
-even if it is not full yet, and bar numbering restarts at 1.
-`day_breaks` holds the index of the first bar of each new trading day,
-`bar_numbers` the number of every closed bar, `current_no` that of the running one.
+even if it is not full yet. `day_breaks` holds the index of the first bar of each new trading day.
+Bar numbers restart at 1 on every new calendar date in Berlin (bar end time), like the
+DayBarNumbering of the NT indicators EntryCount/DoubleTrap, so chart and CSV show the same numbers.
+`bar_numbers` holds the number of every closed bar, `current_no` that of the running one.
 
 All share the same interface: `update()` returns the bars closed in this step,
 `bars` are all closed bars, `current` is the running one,
@@ -21,6 +22,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 CHICAGO = ZoneInfo("America/Chicago")
+NUMBER_TZ = ZoneInfo("Europe/Berlin")   # bar numbers restart at midnight here (NT's time zone, [ChartTrader] TimeZone)
 SESSION_START_HOUR = 17     # CME Globex: new trading day from 17:00 Chicago
 
 
@@ -50,9 +52,26 @@ class RangeBar:
 class _SessionMixin:
     """Shared session and numbering logic (fields are inherited by the aggregators)."""
     next_session: int = 0
-    current_no: int = 0
     bar_numbers: list = field(default_factory=list)
     day_breaks: list = field(default_factory=list)
+
+    def _number(self, ts_close: int) -> int:
+        """Number of a bar ending at ts_close that follows the last closed bar (DayBarNumbering: 1 on a new
+        calendar date, else previous + 1)."""
+        if not self.bar_numbers:
+            return 1
+        day = datetime.fromtimestamp(ts_close / 1e9, tz=NUMBER_TZ).date()
+        prev = datetime.fromtimestamp(self.bars[len(self.bar_numbers) - 1].ts_close / 1e9, tz=NUMBER_TZ).date()
+        return 1 if day != prev else self.bar_numbers[-1] + 1
+
+    def _close_number(self, b) -> None:
+        """Number the bar b that was just appended to bars."""
+        self.bar_numbers.append(self._number(b.ts_close))
+
+    @property
+    def current_no(self) -> int:
+        """Number of the running bar (end = its last trade so far; 0 without a running bar)."""
+        return self._number(self.current.ts_close) if self.current is not None else 0
 
     def _session_check(self, ts: int) -> list:
         """Before each trade: on session change close the running bar and restart numbering."""
@@ -65,12 +84,11 @@ class _SessionMixin:
                 b = self.current
                 b.closed = True
                 self.bars.append(b)
-                self.bar_numbers.append(self.current_no)
+                self._close_number(b)
                 closed.append(b)
                 self.current = None
                 self._on_session_close()
             self.day_breaks.append(len(self.bars))
-            self.current_no = 0
             self.next_session = next_session_start_ns(ts)
         return closed
 
@@ -85,13 +103,13 @@ class _SessionMixin:
         b = self.current
         b.closed = True
         self.bars.append(b)
-        self.bar_numbers.append(self.current_no)
+        self._close_number(b)
         self.current = None
         self._on_session_close()
         return [b]
 
     def number_of(self, i: int) -> int | None:
-        """Session number of the bar at index i (closed and running bar)."""
+        """Day number of the bar at index i (closed and running bar)."""
         if 0 <= i < len(self.bar_numbers):
             return self.bar_numbers[i]
         if i == len(self.bars) and self.current is not None:
@@ -126,7 +144,6 @@ class RangeBarAggregator(_SessionMixin):
         closed = self._session_check(ts)
         if self.current is None:
             self.current = RangeBar(price, price, price, price, size, ts, ts)
-            self.current_no += 1
             return closed
         bar = self.current
         # on a gap the price can run through several bars
@@ -147,13 +164,12 @@ class RangeBarAggregator(_SessionMixin):
             bar.ts_close = ts
             bar.closed = True
             self.bars.append(bar)
-            self.bar_numbers.append(self.current_no)
+            self._close_number(bar)
             closed.append(bar)
             # open new bar at the close of the old one
             o = bar.close
             bar = RangeBar(o, o, o, o, 0.0, ts, ts)
             self.current = bar
-            self.current_no += 1
             # loop: check whether the price breaks this bar as well
 
 
@@ -184,7 +200,6 @@ class TickBarAggregator(_SessionMixin):
         if self.current is None:
             self.current = RangeBar(price, price, price, price, size, ts, ts)
             self.count = 1
-            self.current_no += 1
         else:
             b = self.current
             b.high, b.low, b.close, b.ts_close = max(b.high, price), min(b.low, price), price, ts
@@ -194,7 +209,7 @@ class TickBarAggregator(_SessionMixin):
             b = self.current
             b.closed = True
             self.bars.append(b)
-            self.bar_numbers.append(self.current_no)
+            self._close_number(b)
             self.current = None
             self.count = 0
             closed.append(b)
@@ -234,7 +249,6 @@ class VolumeBarAggregator(_SessionMixin):
         if self.current is None:
             self.current = RangeBar(price, price, price, price, size, ts, ts)
             self.count = size
-            self.current_no += 1
         else:
             b = self.current
             b.high, b.low, b.close, b.ts_close = max(b.high, price), min(b.low, price), price, ts
@@ -244,7 +258,7 @@ class VolumeBarAggregator(_SessionMixin):
             b = self.current
             b.closed = True
             self.bars.append(b)
-            self.bar_numbers.append(self.current_no)
+            self._close_number(b)
             self.current = None
             self.count = 0.0
             closed.append(b)

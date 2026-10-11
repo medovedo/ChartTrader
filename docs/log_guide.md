@@ -14,8 +14,8 @@ also möglich und sollten in der Auswertung als Regelverstoß bzw. Übungs-Trade
   Uhrzeiten, Dauer und PnL stehen im Trade-Log (CSV, siehe unten).
 - Preise mit Punkt (5967.00), Trade-Log mit Dezimalkomma (5967,00).
 - Mehrere `FILL`-Zeilen = ein Auftrag in mehreren Teilen oder mehrere Brackets (eine je ATM-Bracket).
-- Bar-Nummern im Log (`bar 50`, `bars 40..59`) sind die Nummern wie im Chart: je Session ab 1,
-  Session-Start 17:00 Chicago (00:00 Berlin).
+- Bar-Nummern im Log (`bar 50`, `bars 40..59`) sind die Nummern wie im Chart: je Kalendertag (Berlin) ab 1,
+  maßgeblich ist die Endzeit der Bar – dieselben Nummern wie in den EntryCount/DoubleTrap-CSVs.
 
 ## Meldungen
 **Replay/Chart**

@@ -179,7 +179,7 @@ marker. In both cases the `python3` in `PATH` must be the venv's (activate the v
 | Mouse wheel | More / fewer bars in view (20 to 600) |
 | Ctrl+mouse wheel, Ctrl+vertical drag | Compress / stretch price axis; view follows price |
 | R | Price axis back to auto and the view back to the newest bar (a chart dragged by hand stays where it is until then, a new bar or a price move) |
-| Hover over a bar | Info box next to the pointer: bar number, date, time from–to (time zone of "Jump to"), open, high, low, close, volume, size in ticks, duration. Works for the running bar too and updates during playback |
+| Hover over a bar | Info box next to the pointer: bar number (restarts at 1 on every calendar day in Berlin, like the EntryCount/DoubleTrap CSVs), date, time from–to (time zone of "Jump to"), open, high, low, close, volume, size in ticks, duration. Works for the running bar too and updates during playback |
 | H | Horizontal line at the mouse pointer with the price (snapped to the tick) on the right, on/off; also button "Crosshair (H)", default on. It ignores the mouse, so stop/target lines and drawings underneath can still be dragged |
 | T | Trend line: two left clicks place the line (preview follows the mouse), then drawing mode turns off; hold Shift for a horizontal line (the end point keeps the price of the start point); right click or Esc cancels. The line is extended to the right as a dashed line |
 | A | Text: the dialog opens at once; Enter places the text at the mouse pointer in the chart (pointer outside the chart: where it was when the dialog opened, else at the last price). Shift+Enter = new line, Esc cancels |

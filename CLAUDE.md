@@ -101,7 +101,9 @@ bewusste Architekturentscheidung – keine eigene Fill-Simulation bauen.
   „tuning EC-n“ markiert und noch nicht in den .cs-Dateien (Schritt 4): Nr. 1 = EC-11 `PauseCountAfterCounterTrendF2E`
   (Default aus; nur EntryCount, nicht das von DoubleTrap gehostete). DT wird im CT getunt und danach nach C# übertragen
   (Nutzer 10.10.2026, ohne NT-Parität für DT): Nr. 3 DT-a `DtSignalBarIsCorrectionExtreme`, Nr. 4 DT-b
-  `DtRequireEntryStopsHit` (Wade Regel 5, beide Default aus). Wades Regeln W1–W5 stehen in der SPEC. Chart-Panel rechts: Anzeige-Schalter (nur Filter,
+  `DtRequireEntryStopsHit` (Wade Regel 5, beide Default aus). Nr. 5 EC-12 `F2EWatchUntil2EOrigin` (Reset d beendet die
+  F2E-Beobachtung nur jenseits des Ursprungs des 2E; Code aus, CT an). Bar-Nr. überall je Kalendertag Berlin
+  (Bar-Endzeit, `range_bars._number` wie `DayBarNumbering`), nicht je Session (Nutzer 11.10.2026). Wades Regeln W1–W5 stehen in der SPEC. Chart-Panel rechts: Anzeige-Schalter (nur Filter,
   Indikatoren zeichnen im Chart alles, `PaRunner(draw_all=True)`). Tests: `test_entrycount_doubletrap.py`
   (pytest, C#-Testfälle 1–15). Tuning erst nach 100 % Parität: SPEC → Code → `CHANGELOG_Tuning.md`.
 - `export_bars.py` – Bars als CSV wie NTs Indikator `TickBarsExporter.cs` (Dateiname

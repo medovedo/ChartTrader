@@ -30,8 +30,9 @@ Konventionen: ES, Tick = 0,25 Punkte = 12,50 $. Bar[0] = laufende Bar, Bar[1] = 
 - **Range-Bars** (`range:N`): High − Low = genau N Ticks. Verlässt ein Trade die Spanne, schließt die Bar an der
   Kante (Close = Kante); die nächste öffnet am Close der vorigen (keine Phantom-Lücke). Bei einem Sprung über
   mehrere Spannen entstehen mehrere Bars im selben Tick.
-- **Session-Wechsel** (17:00 Chicago): Die laufende Bar wird geschlossen, auch wenn sie nicht voll ist; die
-  Bar-Nummerierung beginnt bei 1.
+- **Session-Wechsel** (17:00 Chicago): Die laufende Bar wird geschlossen, auch wenn sie nicht voll ist.
+- **Bar-Nummern**: beginnen an jedem neuen Kalendertag (Berlin, Bar-Endzeit) bei 1, wie `DayBarNumbering` der
+  NT-Indikatoren; Chart, Log und EntryCount/DoubleTrap-CSV zeigen dieselben Nummern.
 - **EMA** (Anzeige und Indikatoren): EMA 21 auf Bar-Closes wie NT: erster Wert = erster Close, danach
   `Close · 2/(n+1) + Vorwert · (1 − 2/(n+1))`.
 
