@@ -96,6 +96,18 @@ Code-Default false = Verhalten des C#-Codes (Parität).
   Bar-Zeile steht der Zustand „Paused“. Ist der Parameter aus, ändert sich an der CSV nichts.
 - Gilt nur für EntryCount; das von DoubleTrap gehostete EntryCount bleibt beim C#-Verhalten (DT wird später getunt).
 
+### EC-12 F2E-Beobachtung bis zum Ursprung des 2E (neu, CHANGELOG Nr. 5, 11.10.2026)
+Parameter `F2EWatchUntil2EOrigin`. Im CT **eingeschaltet** (`entrycount_doubletrap.toml`); Code-Default false = C#-Verhalten.
+- C#: Reset d (neues Extrem) beendet die F2E-Beobachtung bei **jedem** Bruch des aktuellen Ursprungs. Hat ein
+  Key-Level-Reset (a/c) nach dem 2E den Ursprung auf die Kontakt-Bar verlegt, reicht schon das nächste höhere Hoch
+  (Long) – der 2E gilt als erfolgreich, obwohl der Pullback-Start nicht erreicht ist.
+- Neu: Beim 2E wird der Ursprung seiner Zählung gemerkt (`F2OriginPrice`). Reset d beendet die Beobachtung nur noch,
+  wenn die Bar **diesen** Ursprung bricht (Long: Hoch > Ursprung des 2E). Zähler und Ursprung setzt Reset d wie bisher zurück.
+- Beispiel 19.03.2025 (ES JUN25, 2000 Tick, Bar-Nr. des Indikators): 2EL Bar 87, Ursprung 5692.50 (Bar 73); Key Level
+  Bar 88 → Ursprung 5682.75; Bar 89 Hoch 5687.25 beendete die Beobachtung. Mit EC-12: F2EL an Bar 92 (Tief unter Bar 91,
+  Hoch 5690.50 < 5692.50).
+- Gilt nur für EntryCount; das von DoubleTrap gehostete EntryCount bleibt beim C#-Verhalten.
+
 ### EC-9 Trend und Swings
 - Trend: EMA(`EmaPeriod` 21) heute minus vor `EmaSlopeLookback` (5) Bars, in Ticks: ≥ `MinEmaSlopeTicks` (2) → +1,
   ≤ −2 → −1, sonst 0.
@@ -111,7 +123,8 @@ MinBodyPct 45 · MinClosePct 70 · MaxBreakoutWickPct 25 · UseRejectionExceptio
 RejectionMaxWickPct 10 · StopMode SignalAndPrevBar · RiskTemplateTicks 16 · RiskToleranceTicks 2 · MaxPullbackPct 49 ·
 RequireEqualOrHigherLeg **false** (entschieden 10.10.2026; der NT-Chart lief mit true) · ResetOnKeyLevel true ·
 ResetScope CounterTrendOnly · ResetAfterTwoLegs true · ResetOnNewExtreme true · FailedEntryMode PriorBarBreak ·
-InsideBarAsSignal true · PauseCountAfterCounterTrendF2E **true** im CT (neu, EC-11; Code-Default false)
+InsideBarAsSignal true · PauseCountAfterCounterTrendF2E **true** im CT (neu, EC-11; Code-Default false) ·
+F2EWatchUntil2EOrigin **true** im CT (neu, EC-12; Code-Default false)
 
 ### Offene Punkte aus PORT_NOTES (nicht umgesetzt, nur zur Entscheidung)
 #1 Parameter in die CSV · #4 Ursprungs-Vergleich ohne halben Tick · #5 übersprungener Entry als eigenes Event.

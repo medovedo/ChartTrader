@@ -178,7 +178,7 @@ Der Vorlagen-Stop von 12 Ticks gilt nur bis zum ersten Fill; danach ersetzt ihn 
 - **Exit-Grund**: Ein Flatten zählt als Manual; einen automatischen Session-Schluss gibt es nicht.
 - Eine Datei mit altem Kurz-Header bleibt stehen; das Log geht dann nach `trade_log_v2.csv`.
 
-## 8. EntryCount (Port `EntryCount.cs`, Regeln EC-1 … EC-11)
+## 8. EntryCount (Port `EntryCount.cs`, Regeln EC-1 … EC-12)
 
 Verarbeitung je geschlossener Bar, keine Vorausschau. „Bruch“ = mindestens 1 Tick darüber/darunter.
 
@@ -209,17 +209,20 @@ Verarbeitung je geschlossener Bar, keine Vorausschau. „Bruch“ = mindestens 1
   - a/c Key Level: neuer Kontakt mit der EMA ± 2 Ticks, nur für die Zählung gegen den EMA-Trend; vor der Zählung
     der Bar.
   - b zwei Beine: nach F2E Zähler 0, Ursprung = Extrem seit dem 2E-Trigger.
-  - d neues Extrem: Bruch über den Ursprung → Zähler 0, Ursprung = diese Bar.
+  - d neues Extrem: Bruch über den Ursprung → Zähler 0, Ursprung = diese Bar; beendet die F2E-Beobachtung
+    (mit EC-12 nur beim Bruch des Ursprungs, aus dem der 2E gezählt wurde).
 - **EC-9 Trend**: EMA 21 jetzt minus vor 5 Bars ≥ 2 Ticks → +1, ≤ −2 → −1, sonst 0.
   - Swings: 2 Bars je Seite.
 - **EC-11 Pause** (CT: an; C#-Default aus):
   - F2ES bei Trend +1 pausiert die Short-Zählung bis zum ersten Close unter der EMA.
   - F2EL bei Trend −1 pausiert die Long-Zählung bis zum ersten Close über der EMA.
   - Neustart bei 0 mit Ursprung = diese Bar.
+- **EC-12 F2E-Beobachtung** (CT: an; C#-Default aus): verlegt ein Key-Level-Reset nach dem 2E den Ursprung, beendet
+  erst ein Bruch über den Ursprung des 2E (Pullback-Start) die Beobachtung, nicht schon das nächste höhere Hoch.
 
 ## 9. DoubleTrap (Port `DoubleTrap.cs`, Regeln DT-1 … DT-7, DT-a/b)
 
-Long beschrieben; DoubleTrap hostet ein eigenes EntryCount (ohne EC-11).
+Long beschrieben; DoubleTrap hostet ein eigenes EntryCount (ohne EC-11/EC-12).
 
 - **DT-1 Ablauf**: 2EL → F2EL → Signal-Bar suchen (die F2E-Bar darf es sein) → Signal: Entry = High + 1 Tick.
   - Ausgelöst, wenn ein High den Entry erreicht.

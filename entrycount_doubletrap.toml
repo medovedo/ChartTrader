@@ -38,6 +38,9 @@ InsideBarAsSignal = true
 # Tuning (not in EntryCount.cs yet): EC-11 / CHANGELOG Nr. 1. F2ES in an uptrend pauses the short count until
 # a close below the EMA (F2EL in a downtrend: long count until a close above the EMA)
 PauseCountAfterCounterTrendF2E = true          # CT default since 10.10.2026 (C#: off)
+# EC-12 / CHANGELOG Nr. 5. Reset d (new extreme) ends the F2E watch only beyond the origin of the count the 2E
+# came from, not beyond an origin a key level reset moved after the 2E
+F2EWatchUntil2EOrigin = true                   # CT default since 11.10.2026 (C#: off)
 # 5. Display
 ShowLabels = true
 MaxLabeledCount = 3

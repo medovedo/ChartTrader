@@ -479,6 +479,7 @@ class CountState:
         self.F2RunExtreme = 0.0
         self.F2RunExtremeBar = 0
         self.Paused = False                # tuning EC-11: counter-trend count paused after its F2E
+        self.F2OriginPrice = 0.0           # tuning EC-12: origin of the count the 2E came from
 
 
 BAR_TYPE_FIRST = "First"
@@ -857,6 +858,7 @@ class EntryCount:
         if c.Count == 2:
             c.F2Armed = True
             c.F2Level = sig.Low if c.IsLong else sig.High
+            c.F2OriginPrice = c.OriginPrice     # tuning EC-12
             c.F2ArmBar = self.CurrentBar
             c.F2RunExtreme = b0.high if c.IsLong else b0.low
             c.F2RunExtremeBar = self.CurrentBar
@@ -980,7 +982,11 @@ class EntryCount:
         b0, half, cfg = self._bar(0), self.halfTick, self.cfg
         # Reset d) ASSUMPTION: a new extreme beyond the origin moves the origin (the 2E, if any, has succeeded).
         if cfg.ResetOnNewExtreme and (b0.high > c.OriginPrice + half if c.IsLong else b0.low < c.OriginPrice - half):
-            c.F2Armed = False
+            # tuning EC-12: the F2E watch only ends beyond the origin of the 2E's count, not beyond an origin
+            # that a key level reset moved after the 2E
+            if not cfg.F2EWatchUntil2EOrigin or (b0.high > c.F2OriginPrice + half if c.IsLong
+                                                  else b0.low < c.F2OriginPrice - half):
+                c.F2Armed = False
             self.reset_count(c, RESET_NEW_EXTREME, b0.high if c.IsLong else b0.low, self.CurrentBar)
 
         # Reset a)/c) ASSUMPTION: CounterTrendOnly resets only the count against the EMA trend.

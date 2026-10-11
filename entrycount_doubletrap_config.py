@@ -55,6 +55,7 @@ class EntryCountConfig:
     InsideBarAsSignal: bool = True
     # Tuning (not in EntryCount.cs yet, see SPEC/CHANGELOG)
     PauseCountAfterCounterTrendF2E: bool = False    # EC-11: F2ES in an uptrend pauses the short count (mirror long)
+    F2EWatchUntil2EOrigin: bool = False             # EC-12: a new extreme ends the F2E watch only beyond the 2E's origin
     # Display
     ShowLabels: bool = True
     MaxLabeledCount: int = 3
