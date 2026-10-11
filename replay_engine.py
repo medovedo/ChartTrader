@@ -53,6 +53,7 @@ class ManualStrategy(Strategy):
         self._order_info: dict[ClientOrderId, TradeInfo] = {}  # entry order -> journal details (manual bracket)
         self._position_setup = "Manual"
         self._position_info: TradeInfo | None = None    # details of the open position for the journal
+        self.surprised = False              # GUI box "Surprised": taken over by the next position, then cleared
         self.realized_closed = 0.0          # sum over all closed positions (the cache keeps only the last one)
         self.pa = None                      # PaRunner (EntryCount/DoubleTrap ports), set by ReplayEngine (optional)
 
@@ -103,6 +104,11 @@ class ManualStrategy(Strategy):
 
     def on_position_opened(self, event):
         self._position_setup, self._position_info = self._origin(event.opening_order_id)
+        # "Surprised" counts only if ticked before the position opened; then it is cleared for the next trade
+        self._position_info.surprised = self.surprised
+        if self.surprised:
+            self.events.append("Trade marked as surprised")
+        self.surprised = False
 
     def on_position_closed(self, event):
         self.realized_closed += float(event.realized_pnl)

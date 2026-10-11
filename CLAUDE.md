@@ -82,7 +82,8 @@ bewusste Architekturentscheidung – keine eigene Fill-Simulation bauen.
   (`_trade_info`, hängt an `Trap`/`AtmTrade.info`) und mit den geplanten Targets nach dem Fill; die Strategie
   ergänzt Exit-Fills (`_journal_exit`, Rolle T1/T2/SL über die Brackets) und bestätigte GUI-Verschiebungen
   (`_journal_move`). Nautilus aktualisiert die Position **vor** `on_order_filled` (beim letzten Exit schon
-  geschlossen). Datei mit altem Kurz-Header bleibt stehen, Log geht dann nach `*_v2.csv`. Test: `test_journal.py`.
+  geschlossen). Spalte `Surprised`: GUI-Box → `ManualStrategy.surprised`, in `on_position_opened` übernommen und
+  geleert (später angehakt zählt für den nächsten Trade). Datei mit altem Kurz-Header bleibt stehen, Log geht dann nach `*_v2.csv`. Test: `test_journal.py`.
 - `entry_count.py`, `double_trap.py` – 1:1-Port der NT8-Indikatoren `EntryCount.cs`/`DoubleTrap.cs`
   (`Documents\NinjaTrader 8\bin\Custom\Indicators`, kein Git dort). Aufgabe: `Prompt_Port_EntryCount_DoubleTrap_CT.md`.
   **Port, keine Verbesserung**: Zweifel am C#-Code nach `PORT_NOTES.md`, nie in den Port; nie den C#-Code für Parität ändern.

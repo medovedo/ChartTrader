@@ -10,7 +10,8 @@ separator ';', decimal comma, UTF-8 with BOM. Times in Europe/Berlin.
 
 The detail columns behind `Duration` come from a `TradeInfo`: the Sniper fills it when the trap is
 armed (signal bar, trigger, limit, structural stop, ATM) and with the planned targets after the fill;
-ManualStrategy adds the exit fills and the confirmed manual order moves. A file that still has the
+ManualStrategy adds the exit fills and the confirmed manual order moves. `Surprised` = the GUI box was
+ticked when the position opened (ticking it later does not change that trade). A file that still has the
 old short header is left alone; the log then goes to `<name>_v2.csv`.
 """
 from __future__ import annotations
@@ -26,7 +27,7 @@ COLUMNS_V1 = ["Replayed", "Date", "Open", "Close", "Instrument", "Setup", "Side"
 DETAIL_COLUMNS = ["SignalBarStart", "SignalO", "SignalH", "SignalL", "SignalC", "PrevBarH", "PrevBarL",
                   "Trigger", "EntryType", "LimitPrice", "InitialSL", "RiskTicks", "Template", "MaxRiskTicks",
                   "T1Price", "T2Price", "ExitT1", "ExitT1Time", "ExitRunner", "ExitRunnerTime",
-                  "RunnerExitReason", "ManualChanges", "DistEMA"]
+                  "RunnerExitReason", "ManualChanges", "DistEMA", "Surprised"]
 COLUMNS = COLUMNS_V1 + DETAIL_COLUMNS
 
 
@@ -58,6 +59,7 @@ class TradeInfo:
     trade: Any = None                                    # Sniper AtmTrade (roles follow replaced exits)
     exits: list[ExitFill] = field(default_factory=list)
     manual_changes: list[str] = field(default_factory=list)
+    surprised: bool = False                  # "Surprised" box was ticked when the position opened
 
 
 def ema_last(closes: list[float], period: int) -> float | None:
@@ -178,6 +180,7 @@ class TradeJournal:
         out["ManualChanges"] = " | ".join(info.manual_changes).replace(self.sep, ",")
         if info.dist_ema is not None:
             out["DistEMA"] = _px(info.dist_ema, d)
+        out["Surprised"] = "yes" if info.surprised else "no"
         return out
 
     def _time(self, ts: int) -> str:

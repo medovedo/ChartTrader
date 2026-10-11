@@ -154,8 +154,10 @@ Sniper setup with ATM template, e.g. `Smart Short WADES16`), `Side`, `Qty`, `Ent
 `SignalBarStart`, `SignalO/H/L/C`, `PrevBarH/L`, `Trigger`, `EntryType` (`Direct`, `PullbackLimit`, `Manual`),
 `LimitPrice`, `InitialSL`, `RiskTicks`, `Template`, `MaxRiskTicks`, `T1Price`, `T2Price` (planned after the fill),
 `ExitT1`, `ExitT1Time`, `ExitRunner`, `ExitRunnerTime`, `RunnerExitReason` (`Target`, `BE`, `Stop`, `Manual`),
-`ManualChanges` (confirmed chart moves, e.g. `T1 7822,50->7823,75 | SL2 7829,25->BE`) and `DistEMA`
-(signal bar close minus EMA 21, points). An existing file with the old short header is kept; the log then goes to
+`ManualChanges` (confirmed chart moves, e.g. `T1 7822,50->7823,75 | SL2 7829,25->BE`), `DistEMA`
+(signal bar close minus EMA 21, points) and `Surprised` (`yes`/`no`: the box "Surprised" at the top of the Sniper panel
+was ticked when the position opened; the box is then cleared, ticking it during a trade counts for the next one;
+trading works without it). An existing file with the old short header is kept; the log then goes to
 `trade_log_v2.csv`. Excel format for a German system: `;` separator, decimal comma, UTF-8 with BOM.
 The log below the chart shows a `JOURNAL` line for each trade.
 

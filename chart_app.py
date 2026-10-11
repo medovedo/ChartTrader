@@ -633,8 +633,15 @@ class ChartTrader(QtWidgets.QMainWindow):
         return self.engine.sniper
 
     def _build_sniper_panel(self) -> QtWidgets.QWidget:
-        panel = QtWidgets.QWidget(); grid = QtWidgets.QGridLayout(panel)
-        grid.setContentsMargins(4, 4, 4, 4); grid.setSpacing(3)
+        panel = QtWidgets.QWidget(); col = QtWidgets.QVBoxLayout(panel)
+        col.setContentsMargins(4, 4, 4, 4); col.setSpacing(3)
+        # "Surprised": tick before the trade; the position takes it over when it opens (trade log column), later
+        # clicks count for the next trade. Trading works without it.
+        self.surprised_box = QtWidgets.QCheckBox("Surprised (tick before the trade)")
+        self.surprised_box.setStyleSheet("font-weight: bold; padding: 4px")
+        self.surprised_box.toggled.connect(self.set_surprised)
+        col.addWidget(self.surprised_box)
+        grid = QtWidgets.QGridLayout(); grid.setSpacing(3); col.addLayout(grid)
         sn = self.sniper
 
         def btn(text, color, fn, fg="white"):
@@ -727,6 +734,21 @@ class ChartTrader(QtWidgets.QMainWindow):
             if tag.startswith(prefix):
                 return s[key]
         return True
+
+    def set_surprised(self, on: bool):
+        """Box "Surprised": the next position that opens takes it over (then it is cleared)."""
+        st = self.engine.strategy
+        if st.surprised == on:
+            return
+        st.surprised = on
+        if on and self.engine.state().net_qty != 0:
+            self.log.appendPlainText("Surprised: counts for the next trade (the open position was entered without it)")
+
+    def _sync_surprised(self):
+        """The strategy clears the flag when a position opens: show that in the box."""
+        box = getattr(self, "surprised_box", None)
+        if box is not None and box.isChecked() != self.engine.strategy.surprised:
+            box.blockSignals(True); box.setChecked(self.engine.strategy.surprised); box.blockSignals(False)
 
     def sniper_action(self, fn):
         """Sniper button/hotkey: execute, messages to the log, refresh the display."""
@@ -1215,6 +1237,7 @@ class ChartTrader(QtWidgets.QMainWindow):
 
     # --- Display ------------------------------------------------------------
     def _drain_events(self):
+        self._sync_surprised()
         ev = self.engine.strategy.events
         while ev:
             msg = ev.pop(0); self.log.appendPlainText(msg)

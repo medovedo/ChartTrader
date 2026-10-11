@@ -36,6 +36,9 @@ also möglich und sollten in der Auswertung als Regelverstoß bzw. Übungs-Trade
 - Zeilen, die mit einer Bar-Nummer und `;EntryCount;` bzw. `;DoubleTrap;` beginnen, erscheinen nur mit
   `DebugLog = true` in `entrycount_doubletrap.toml`: dieselben Ereigniszeilen wie in der NT-CSV (Entry, F2E, Reset,
   DtCandidate, DtSignal, DtRejected, Weak2E, ThirdEntryInvalid; Spalte `Reason` = Grund).
+- `Trade marked as surprised` – die Position hat beim Öffnen die angehakte Box „Surprised“ übernommen.
+- `Surprised: counts for the next trade (the open position was entered without it)` – Box erst während eines
+  Trades angehakt; sie gilt für den nächsten Trade, der laufende bleibt `no`.
 - `JOURNAL detail error: …` – Detaildaten für das Trade-Log konnten nicht erfasst werden (Programmfehler);
   der Trade selbst und seine Log-Zeile sind davon nicht betroffen, nur einzelne Detailspalten fehlen.
 
@@ -84,6 +87,8 @@ Dahinter Detailspalten (leer, wenn ein Wert fehlt, z. B. bei manuellem Einstieg 
 - `ManualChanges`: meine bestätigten Verschiebungen nach dem Entry, getrennt mit ` | `,
   z. B. `T1 7822,50->7823,75 | SL2 7829,25->BE` (Scratch zählt nicht dazu).
 - `DistEMA`: Close der Signal-Bar minus EMA 21 (über die Bars des Charts) in Punkten.
+- `Surprised`: `yes`, wenn ich die Box „Surprised“ (oben im Sniper-Panel) vor dem Trade angehakt hatte – maßgeblich
+  ist der Moment, in dem die Position öffnet; danach wird die Box geleert. `no` = nicht angehakt.
 Existiert schon eine Datei mit dem alten kurzen Kopf, bleibt sie unangetastet und das Log geht nach
 `trade_log_v2.csv`.
 
