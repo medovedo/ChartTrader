@@ -153,7 +153,8 @@ MBO-Daten (Fill-Granularität, ES.FUT Parent): `D:\trading\GLBX-20260912-SEP25\g
 MBO August 2026 (12.–14.8., ESU6): `D:\trading\GLBX-20260912-Q3LAP6TSC5\`. NT-Exporte (Tick-Bars
 per `TickBarsExporter`, Ticks per Historical Data > Export) liegen unter `G:\Meine Ablage\Trading\`.
 Er kann Python und C#, schreibt Rust. Er handelt in NinjaTrader mit der eigenen Strategie
-LotsenhofSniper (C#, Git-Repo im Strategies-Ordner) und ATM-Vorlagen WADES6..16 (+NR); Charts dort
+LotsenhofSniper (C#, Repo github.com/medovedo/LSniper im Strategies-Ordner; Ordner gehört SYSTEM →
+`git -c safe.directory=…`; Nutzer pusht selbst) und ATM-Vorlagen WADES6..16 (+NR); Charts dort
 sind 2000-Tick-Bars mit EMA 21. NT-Verbindungen laut Config.xml: "My NinjaTrader Continuum" (CQG)
 und Kinetick EOD; die Live-Verbindung heißt im Log "Live" (Anbieter nicht aus der Config ablesbar).
 
