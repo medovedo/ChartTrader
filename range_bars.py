@@ -284,7 +284,8 @@ class HigherEma:
     A second aggregator runs on the same trades. The value of a chart bar is the EMA as of its last trade,
     the running higher bar counting with its close so far (on a tick:2000 chart every 5th value is the exact
     EMA of a closed 10000-tick bar). `values` is aligned with the chart's closed bars, `current` belongs to
-    the running chart bar.
+    the running chart bar. `points` = (chart bar index, EMA) at every close of a higher bar: the chart draws
+    the line through these exact values only (smooth, no provisional steps) plus a last segment to `current`.
     """
 
     def __init__(self, spec: str, period: int, tick_size: float):
@@ -293,6 +294,7 @@ class HigherEma:
         self.k = 2.0 / (period + 1)
         self.ema: float | None = None       # EMA over the closed higher bars
         self.values: list[float] = []
+        self.points: list[tuple[int, float]] = []
 
     def fresh(self) -> "HigherEma":
         return HigherEma(self.spec, self.period, self.tick_size)
@@ -312,8 +314,13 @@ class HigherEma:
         """One trade; chart_closed = the chart bars this trade closed (from the chart aggregator)."""
         # Chart bars closed by a session change ended with the previous trade: value before this trade
         before = self.current if any(b.ts_close < ts for b in chart_closed) else None
-        for b in self.agg.update(price, size, ts):
-            self.ema = b.close if self.ema is None else self.ema + self.k * (b.close - self.ema)
+        base = len(self.values)             # chart index of chart_closed[0]; the running bar follows them
+        for hb in self.agg.update(price, size, ts):
+            self.ema = hb.close if self.ema is None else self.ema + self.k * (hb.close - self.ema)
+            # the chart bar that holds the last trade of the higher bar (a session close ended it a trade earlier)
+            idx = next((base + j for j, b in enumerate(chart_closed) if b.ts_close == hb.ts_close),
+                       base + len(chart_closed))
+            self.points.append((idx, self.ema))
         for b in chart_closed:
             v = before if b.ts_close < ts else self.current
             self.values.append(v if v is not None else b.close)

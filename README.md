@@ -136,9 +136,9 @@ the EntryCount/DoubleTrap display switches and the window size. They are loaded 
 `--bar-width` overrides the saved width. Data, bar type and EMA period stay command-line options.
 EMA line via `--ema 21` (0 = off), orange, on bar closes including the running bar.
 Red line: EMA of a higher bar series, default EMA 21 of 10000-tick bars (`--htf-ema tick:10000:21`, any bar type as
-`BARS:PERIOD`, `off` = none). A second aggregator runs on the same trades; each chart bar shows the value at its
-last trade (the running 10K bar counts with its close so far), so on a 2000-tick chart every 5th bar carries the exact
-value of a closed 10K bar.
+`BARS:PERIOD`, `off` = none). A second aggregator runs on the same trades. The line connects the exact EMA values at
+the closes of the 10K bars with straight segments (on a 2000-tick chart every 5th bar), so it is smooth and never
+changes afterwards; only the last segment to the newest bar is provisional (running 10K bar with its close so far).
 With `--day`, the previous trading day is loaded automatically as context (Sunday and holiday
 files, which only hold the evening Globex reopen, are included and searched past): its candles are in the chart from the start, and "Jump to" shows all
 candles from the previous day up to the jump target. For file paths, pass `--context FILE`.

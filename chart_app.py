@@ -1341,8 +1341,14 @@ class ChartTrader(QtWidgets.QMainWindow):
         h = self.engine.htf_ema
         if h is None:
             return
-        values = h.values[start:] + ([h.current] if self.agg.current is not None and h.current is not None else [])
-        self.htf_curve.setData(list(range(start, start + len(values))), values)
+        # Smooth: straight segments between the exact values at the higher bar closes (one point before the
+        # visible range for the left edge), then a last provisional segment to the newest chart bar
+        i = bisect.bisect_left(h.points, (start, float("-inf")))
+        pts = h.points[max(0, i - 1):]
+        n = len(self.agg.bars) + (self.agg.current is not None)
+        if h.current is not None and n and (not pts or pts[-1][0] < n - 1):
+            pts = pts + [(n - 1, h.current)]
+        self.htf_curve.setData([p[0] for p in pts], [p[1] for p in pts])
 
     def _refresh_pa(self, start: int, n: int) -> None:
         """EntryCount/DoubleTrap objects of the visible bars (switches in entrycount_doubletrap.toml)."""
