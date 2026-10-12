@@ -4,6 +4,8 @@ Simulated trades against the SimulatedExchange with tick bars of 10 trades (path
 1. Smart Long, direct trigger: Target1 + runner stopped at breakeven (auto-BE)
 2. Smart Short, pullback limit: Target1 moved by hand, runner flattened by hand
 3. Manual market entry without trap: detail columns stay empty
+4. Smart Long trap expires without trigger: no-trade row with "Surprised" (box cleared)
+5. Cancel All with an armed trap: no-trade row
 plus: an existing log with the old short header is kept, the new rows go to trade_log_v2.csv.
 Usage: python test_journal.py
 """
@@ -119,6 +121,38 @@ def main() -> int:
     check(all(r[k] == "" for k in ("SignalBarStart", "SignalO", "Trigger", "LimitPrice", "InitialSL", "RiskTicks",
                                    "Template", "T1Price", "ExitT1", "DistEMA")), "Trap columns empty")
     samples.append(("3. Manual Market without trap", last_line(path), r))
+    h.eng.end()
+
+    # ---------- 4. Smart Long trap expires without trigger ("Surprised" ticked) ----------
+    h = Harness(BAR_A + BAR_B + [101.50] * 10 + [101.50] * 10, journal=str(log))
+    path = h.strat.journal.path
+    h.run_to(22)
+    check(h.sn.arm_smart(True), "Smart Long armed (direct)")
+    h.strat.surprised = True
+    h.run_to(len(h.ticks))
+    rows = h.strat.journal.rows
+    check(len(rows) == 1, f"One no-trade row: {len(rows)}")
+    r = rows[0]
+    check(r["Setup"] == "Smart Long WADES12" and r["Side"] == "LONG" and r["Qty"] == "0",
+          f"No trade: {r['Setup']} {r['Side']} qty {r['Qty']}")
+    check(all(r[k] == "" for k in ("Entry", "Exit", "Points", "Ticks", "PnL", "Duration", "ExitT1", "ExitRunner")),
+          "No entry/exit/PnL")
+    check(r["Trigger"] == "102,25" and r["InitialSL"] == "99,75" and r["RiskTicks"] == "10" and r["SignalC"] == "101,75",
+          f"Trap columns filled: {r['Trigger']} {r['InitialSL']} {r['RiskTicks']}")
+    check(r["RunnerExitReason"] == "NoTrade (trap expired)", f"Reason {r['RunnerExitReason']!r}")
+    check(r["Surprised"] == "yes" and not h.strat.surprised, "Surprised logged, box cleared")
+    check(r["Open"] <= r["Close"], f"Armed {r['Open']}, ended {r['Close']}")
+    samples.append(("4. Smart Long trap expired", last_line(path), r))
+    h.eng.end()
+
+    # ---------- 5. Cancel All with an armed trap ----------
+    h = Harness(BAR_A + BAR_B + [101.50] * 10, journal=str(log))
+    h.run_to(22)
+    check(h.sn.arm_smart(True), "Smart Long armed (direct)")
+    h.sn.cancel_all()
+    rows = h.strat.journal.rows
+    check(len(rows) == 1 and rows[0]["RunnerExitReason"] == "NoTrade (cancel all)" and rows[0]["Surprised"] == "no",
+          f"Cancel All row: {[r['RunnerExitReason'] for r in rows]}")
     h.eng.end()
 
     for s in samples:

@@ -13,6 +13,10 @@ armed (signal bar, trigger, limit, structural stop, ATM) and with the planned ta
 ManualStrategy adds the exit fills and the confirmed manual order moves. `Surprised` = the GUI box was
 ticked when the position opened (ticking it later does not change that trade). A file that still has the
 old short header is left alone; the log then goes to `<name>_v2.csv`.
+
+A setup that ends without a position (trap expired, entry not filled, Cancel All) gets a row of its own
+(`record_no_trade`): Qty 0, no entry/exit/PnL, Open = armed, Close = ended, `RunnerExitReason` =
+"NoTrade (<reason>)", `Surprised` = state of the box when the setup ended.
 """
 from __future__ import annotations
 
@@ -60,6 +64,7 @@ class TradeInfo:
     exits: list[ExitFill] = field(default_factory=list)
     manual_changes: list[str] = field(default_factory=list)
     surprised: bool = False                  # "Surprised" box was ticked when the position opened
+    armed_ts: int | None = None              # trap armed / entry placed (ns), for rows without a trade
 
 
 def ema_last(closes: list[float], period: int) -> float | None:
@@ -143,10 +148,42 @@ class TradeJournal:
             row.update(self._details(info or TradeInfo(), entry))
         except Exception as e:      # a detail column must never cost the row
             row["ManualChanges"] = f"detail error: {e}".replace(self.sep, ",")
+        self._append(row)
+        return row
+
+    def record_no_trade(self, instrument: str, setup: str, is_long: bool, info: TradeInfo | None,
+                        reason: str, ts_end: int, surprised: bool) -> dict:
+        """Append a row for a setup that ended without a position; returns the row."""
+        info = info or TradeInfo()
+        t0 = datetime.fromtimestamp((info.armed_ts or ts_end) / 1e9, tz=self.zone)
+        row = dict.fromkeys(COLUMNS, "")
+        row.update({
+            "Replayed": self.replayed,
+            "Date": f"{t0:%Y-%m-%d}",
+            "Open": f"{t0:%H:%M:%S}",
+            "Close": self._time(ts_end),
+            "Instrument": instrument,
+            "Setup": setup,
+            "Side": "LONG" if is_long else "SHORT",
+            "Qty": "0",
+        })
+        try:
+            planned = info.limit if info.limit is not None else info.trigger   # order price of the entry
+            out = self._details(info, planned if planned is not None else 0.0)
+            if planned is None:
+                out.pop("RiskTicks", None)
+            row.update(out)
+        except Exception as e:
+            row["ManualChanges"] = f"detail error: {e}".replace(self.sep, ",")
+        row["RunnerExitReason"] = f"NoTrade ({reason})"
+        row["Surprised"] = "yes" if surprised else "no"
+        self._append(row)
+        return row
+
+    def _append(self, row: dict) -> None:
         with open(self.path, "a", encoding="utf-8", newline="") as f:
             f.write(self.sep.join(row[c] for c in COLUMNS) + "\r\n")
         self.rows.append(row)
-        return row
 
     def _details(self, info: TradeInfo, entry: float) -> dict:
         d, out = self.decimal, {}

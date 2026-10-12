@@ -153,14 +153,16 @@ Sniper setup with ATM template, e.g. `Smart Short WADES16`), `Side`, `Qty`, `Ent
 `Ticks`, `PnL` ($), `Duration`, followed by detail columns (empty when unknown, e.g. a manual entry without trap):
 `SignalBarStart`, `SignalO/H/L/C`, `PrevBarH/L`, `Trigger`, `EntryType` (`Direct`, `PullbackLimit`, `Manual`),
 `LimitPrice`, `InitialSL`, `RiskTicks`, `Template`, `MaxRiskTicks`, `T1Price`, `T2Price` (planned after the fill),
-`ExitT1`, `ExitT1Time`, `ExitRunner`, `ExitRunnerTime`, `RunnerExitReason` (`Target`, `BE`, `Stop`, `Manual`),
+`ExitT1`, `ExitT1Time`, `ExitRunner`, `ExitRunnerTime`, `RunnerExitReason` (`Target`, `BE`, `Stop`, `Manual`, `NoTrade (...)`),
 `ManualChanges` (confirmed chart moves, e.g. `T1 7822,50->7823,75 | SL2 7829,25->BE`), `DistEMA`
 (signal bar close minus EMA 21, points) and `Surprised` (`yes`/`no`: the box "Surprised" at the top of the Sniper panel
 was ticked when the position opened; the box is then cleared, ticking it during a trade counts for the next one;
 it is also cleared when an armed setup ends without a position: trap expired, entry not filled, Cancel All;
-trading works without it). An existing file with the old short header is kept; the log then goes to
+trading works without it). A Sniper setup that ends without a position (trap expired, entry not filled, Cancel All)
+gets a row of its own: `Qty` 0, no entry/exit/PnL, `Open` = armed, `Close` = ended, `RiskTicks` against the planned entry,
+`RunnerExitReason` `NoTrade (<reason>)`, `Surprised` = the box when the setup ended. An existing file with the old short header is kept; the log then goes to
 `trade_log_v2.csv`. Excel format for a German system: `;` separator, decimal comma, UTF-8 with BOM.
-The log below the chart shows a `JOURNAL` line for each trade.
+The log below the chart shows a `JOURNAL` line for each trade and a `JOURNAL NO TRADE` line for each setup without a position.
 
 ### Tab completion (zsh)
 `chart_app.py` completes its arguments via `argcomplete` (in `requirements.txt`): `--day` offers

@@ -33,6 +33,8 @@ also möglich und sollten in der Auswertung als Regelverstoß bzw. Übungs-Trade
   („was in the market“). Die Order bleibt wie sie war.
 - `JOURNAL SHORT 3 5967 -> 5956  44 ticks  PnL 1650  (Smart Short WADES16)` – Trade abgeschlossen
   (flat): Richtung, Kontrakte, Einstieg, **Durchschnitts**-Ausstieg, Ticks, PnL in $, Setup.
+- `JOURNAL NO TRADE LONG (Smart Long WADES12): trap expired | entry not filled | cancel all` – ein scharfes Setup
+  ist ohne Position zu Ende gegangen; es steht als eigene Zeile im Trade-Log (Qty 0).
 - Zeilen, die mit einer Bar-Nummer und `;EntryCount;` bzw. `;DoubleTrap;` beginnen, erscheinen nur mit
   `DebugLog = true` in `entrycount_doubletrap.toml`: dieselben Ereigniszeilen wie in der NT-CSV (Entry, F2E, Reset,
   DtCandidate, DtSignal, DtRejected, Weak2E, ThirdEntryInvalid; Spalte `Reason` = Grund).
@@ -71,6 +73,10 @@ Trap Armed → Limit … @ L → FILL … → filled @ → STRUCTURAL SL → (Or
 ## Trade-Log (journal/trade_log.csv, Excel: `;` und Dezimalkomma)
 Die Datei wird bei jedem Start des Charttraders neu angelegt (nur die Trades dieses Replays).
 Eine Zeile je Trade von flat zu flat (ATM mit Target1 + Runner = eine Zeile, Exit = Durchschnitt).
+Dazu eine Zeile je Setup, das ohne Position endete (Trap verfallen, Entry nicht gefüllt, Cancel All): `Qty` 0,
+`Entry`/`Exit`/`Points`/`Ticks`/`PnL`/`Duration` und Exit-Spalten leer, `Open` = Zeitpunkt des Armens, `Close` = Ende
+des Setups, `RiskTicks` gegen den geplanten Einstieg (Limit bzw. Trigger), `RunnerExitReason` = `NoTrade (<Grund>)`,
+`Surprised` = Stand der Box beim Ende des Setups. Filter auf `Qty` = 0 zeigt alle nicht ausgelösten Setups.
 Spalten: `Replayed` (wann ich den Replay gespielt habe) · `Date` · `Open` · `Close` (Berlin-Zeit) ·
 `Instrument` · `Setup` (`Manual Market`, `Manual Bracket` oder z. B. `Smart Short WADES16`) ·
 `Side` · `Qty` · `Entry` · `Exit` · `Points` · `Ticks` · `PnL` ($) · `Duration`.
@@ -84,8 +90,8 @@ Dahinter Detailspalten (leer, wenn ein Wert fehlt, z. B. bei manuellem Einstieg 
   späteren Änderungen. `ExitT1`/`ExitT1Time`: Ø-Preis und Zeit der Target1-Fills.
   `ExitRunner`/`ExitRunnerTime`: alle übrigen Ausstiege (Runner, Stops, Flatten), Ø-Preis und letzte Zeit.
 - `RunnerExitReason`: wie die Position zuletzt geschlossen wurde – `Target`, `BE` (Stop auf Ø-Entry ± 1 Tick),
-  `Stop`, `Manual` (Flatten/Killswitch/eigene Order). Eine automatische Session-Schließung gibt es im
-  Replay nicht, `SessionEnd` kommt daher nicht vor.
+  `Stop`, `Manual` (Flatten/Killswitch/eigene Order); `NoTrade (…)` bei Setups ohne Position. Eine automatische
+  Session-Schließung gibt es im Replay nicht, `SessionEnd` kommt daher nicht vor.
 - `ManualChanges`: meine bestätigten Verschiebungen nach dem Entry, getrennt mit ` | `,
   z. B. `T1 7822,50->7823,75 | SL2 7829,25->BE` (Scratch zählt nicht dazu).
 - `DistEMA`: Close der Signal-Bar minus EMA 21 (über die Bars des Charts) in Punkten.

@@ -102,8 +102,19 @@ class ManualStrategy(Strategy):
                 except Exception as e:
                     self.events.append(f"JOURNAL detail error: {e}")
 
-    def setup_ended(self, why: str) -> None:
-        """A Sniper trap or entry ended without a position: "Surprised" belonged to that setup and is cleared."""
+    def setup_ended(self, why: str, ended: list, ts: int) -> None:
+        """Sniper traps/entries ended without a position: one trade log row each (with the "Surprised" state),
+        then the box is cleared - it belonged to that setup."""
+        for label, is_long, info in ended:
+            if self.journal is None:
+                break
+            try:
+                tpl = info.template if info is not None else ""
+                r = self.journal.record_no_trade(str(self.instrument.id.symbol), f"{label} {tpl}".strip(), is_long,
+                                                 info, why, ts, self.surprised)
+                self.events.append(f"JOURNAL NO TRADE {r['Side']} ({r['Setup']}): {why}")
+            except Exception as e:      # the journal must never disturb the replay
+                self.events.append(f"JOURNAL detail error: {e}")
         if self.surprised:
             self.surprised = False
             self.events.append(f"Surprised cleared: setup ended without a trade ({why})")

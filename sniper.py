@@ -341,7 +341,10 @@ class Sniper:
         self.bars: list[Any] = []
         self.cur = 0
         self._last_cur = -1
-        self.on_setup_ended = None  # callback(reason): a trap or entry ended without a position (clears "Surprised")
+        self.ts = 0                 # ts of the last processed tick (ns)
+        # callback(reason, ended, ts): traps/entries that ended without a position, `ended` = [(label, is_long, info)]
+        # (trade log row each, clears "Surprised")
+        self.on_setup_ended = None
 
     # --- ATM selection --------------------------------------------------------
     @property
@@ -453,7 +456,7 @@ class Sniper:
             b1, b2 = self.bars[-1], self.bars[-2]
             ema = ema_last([b.close for b in self.bars], self.cfg.journal_ema_period)
             return TradeInfo(
-                entry_type="PullbackLimit" if pullback else "Direct",
+                armed_ts=self.ts, entry_type="PullbackLimit" if pullback else "Direct",
                 signal_ts=b1.ts_open, signal_ohlc=(b1.open, b1.high, b1.low, b1.close),
                 prev_hl=(b2.high, b2.low), trigger=setup.trigger, limit=setup.limit if pullback else None,
                 initial_sl=setup.stop, template=tpl.name, max_risk=self.max_risk,
@@ -463,7 +466,8 @@ class Sniper:
 
     def cancel_all(self) -> None:
         """Killswitch: Trap removed, entry orders cancelled, positions closed."""
-        pending = self.trap is not None or any(t.entry_price == 0 for t in self.trades)
+        pending = [t for t in self.trades if t.entry_price == 0]
+        tr = self.trap
         self.trap = None
         self.notice = ""
         for t in self.trades:
@@ -472,8 +476,9 @@ class Sniper:
         self.b.close_all()
         self.trades.clear()
         self._log("Killswitch activated. All traps and active orders destroyed.")
-        if pending:
-            self._setup_ended("cancel all")
+        ended = ([(tr.label, tr.is_long, self._info(tr.info, tr.template))] if tr else []) +             [(t.label, t.is_long, t.info) for t in pending]
+        if ended:
+            self._setup_ended("cancel all", ended)
 
     def scratch(self) -> int:
         """Pull targets of all filled trades to entry +/- Scratch Offset (only tighter)."""
@@ -535,6 +540,7 @@ class Sniper:
         else:
             cur = len(bars)
         self.bar0, self.bars, self.cur = bar0, bars, cur
+        self.ts = ts_ns
         new_bar = cur != self._last_cur
         self._last_cur = cur
 
@@ -543,7 +549,7 @@ class Sniper:
         if tr and cur > tr.bar:
             self.trap = None
             self._log(f"{tr.label} trap expired (bar closed without trigger).")
-            self._setup_ended("trap expired")
+            self._setup_ended("trap expired", [(tr.label, tr.is_long, self._info(tr.info, tr.template))])
         elif tr:
             hit = bar0.high >= tr.trigger if tr.is_long else bar0.low <= tr.trigger
             if hit:
@@ -554,11 +560,15 @@ class Sniper:
             if self._manage(t, new_bar):
                 self.trades.remove(t)
                 if t.entry_price == 0:
-                    self._setup_ended("entry not filled")
+                    self._setup_ended("entry not filled", [(t.label, t.is_long, t.info)])
 
-    def _setup_ended(self, why: str) -> None:
+    def _setup_ended(self, why: str, ended: list) -> None:
         if self.on_setup_ended is not None:
-            self.on_setup_ended(why)
+            self.on_setup_ended(why, ended, self.ts)
+
+    @staticmethod
+    def _info(info: TradeInfo | None, tpl: AtmTemplate) -> TradeInfo:
+        return info if info is not None else TradeInfo(template=tpl.name)
 
     def _open_qty(self, t: AtmTrade) -> float:
         qty = 0.0
