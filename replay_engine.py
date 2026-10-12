@@ -102,6 +102,12 @@ class ManualStrategy(Strategy):
                 except Exception as e:
                     self.events.append(f"JOURNAL detail error: {e}")
 
+    def setup_ended(self, why: str) -> None:
+        """A Sniper trap or entry ended without a position: "Surprised" belonged to that setup and is cleared."""
+        if self.surprised:
+            self.surprised = False
+            self.events.append(f"Surprised cleared: setup ended without a trade ({why})")
+
     def on_position_opened(self, event):
         self._position_setup, self._position_info = self._origin(event.opening_order_id)
         # "Surprised" counts only if ticked before the position opened; then it is cleared for the next trade
@@ -363,6 +369,7 @@ class ReplayEngine:
         self.strategy.htf_ema = htf_ema
         if enable_sniper:
             self.strategy.sniper = Sniper(self.strategy, tick_size, sniper_config)
+            self.strategy.sniper.on_setup_ended = self.strategy.setup_ended
         if journal_path:
             self.strategy.journal = TradeJournal(journal_path, tick_size)
         self.strategy.pa = self._new_pa()

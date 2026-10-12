@@ -37,6 +37,8 @@ also möglich und sollten in der Auswertung als Regelverstoß bzw. Übungs-Trade
   `DebugLog = true` in `entrycount_doubletrap.toml`: dieselben Ereigniszeilen wie in der NT-CSV (Entry, F2E, Reset,
   DtCandidate, DtSignal, DtRejected, Weak2E, ThirdEntryInvalid; Spalte `Reason` = Grund).
 - `Trade marked as surprised` – die Position hat beim Öffnen die angehakte Box „Surprised“ übernommen.
+- `Surprised cleared: setup ended without a trade (trap expired | entry not filled | cancel all)` – das Setup, für
+  das ich „Surprised“ angehakt hatte, ist ohne Position zu Ende gegangen; die Box ist wieder leer.
 - `Surprised: counts for the next trade (the open position was entered without it)` – Box erst während eines
   Trades angehakt; sie gilt für den nächsten Trade, der laufende bleibt `no`.
 - `JOURNAL detail error: …` – Detaildaten für das Trade-Log konnten nicht erfasst werden (Programmfehler);
