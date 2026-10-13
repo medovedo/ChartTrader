@@ -36,12 +36,15 @@ ResetAfterTwoLegs = true
 ResetOnNewExtreme = true
 FailedEntryMode = "PriorBarBreak"       # PriorBarBreak | SignalBarBreak
 InsideBarAsSignal = true
-# Tuning (not in EntryCount.cs yet): EC-11 / CHANGELOG Nr. 1. F2ES in an uptrend pauses the short count until
+# Tuning (in EntryCount.cs since 13.10.2026): EC-11 / CHANGELOG Nr. 1. F2ES in an uptrend pauses the short count until
 # a close below the EMA (F2EL in a downtrend: long count until a close above the EMA)
-PauseCountAfterCounterTrendF2E = true          # CT default since 10.10.2026 (C#: off)
+PauseCountAfterCounterTrendF2E = false         # CT on 10.-13.10.2026, replaced by EC-13 (CHANGELOG Nr. 7; C#: off)
 # EC-12 / CHANGELOG Nr. 5. Reset d (new extreme) ends the F2E watch only beyond the origin of the count the 2E
 # came from, not beyond an origin a key level reset moved after the 2E
 F2EWatchUntil2EOrigin = true                   # CT default since 11.10.2026 (C#: off)
+# EC-13 / CHANGELOG Nr. 7. Short counts start only below the EMA (long only above). A short count that started
+# below the EMA runs on above it until its F2ES and then pauses until a close below the EMA (long mirrored).
+CountOnlyFromEmaSide = true                    # CT default since 13.10.2026 (C#: off)
 # 5. Display
 ShowLabels = true
 MaxLabeledCount = 3
@@ -104,7 +107,7 @@ InsideBarAsSignal = true
 DtEmaToleranceTicks = 2
 DtMaxBarsAfterF2E = 10
 DtAllowF2EBarAsSignal = true
-# Tuning (not in DoubleTrap.cs yet): DT-a / DT-b, CHANGELOG Nr. 3 and 4 (Wade rule 5)
+# Tuning (in DoubleTrap.cs since 13.10.2026): DT-a / DT-b, CHANGELOG Nr. 3 and 4 (Wade rule 5)
 DtSignalBarIsCorrectionExtreme = false   # the signal bar itself is the low (long) / high (short) of the correction
 DtRequireEntryStopsHit = false           # the correction extreme reaches the structural stops of the 1E and the 2E
 # 06. Weak 2E (DT expected)

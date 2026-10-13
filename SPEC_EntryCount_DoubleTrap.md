@@ -88,8 +88,8 @@ Struktur; Limit = Stop ± 15 Ticks), sonst TooLarge.
 - Anzeige: Punkt am neuen Ursprung + R:KL / R:2L / R:NX.
 
 ### EC-11 Pause der Gegentrend-Zählung nach ihrem F2E (neu, CHANGELOG Nr. 1, 10.10.2026)
-Parameter `PauseCountAfterCounterTrendF2E`. Im CT **eingeschaltet** (`entrycount_doubletrap.toml`, CHANGELOG Nr. 2);
-Code-Default false = Verhalten des C#-Codes (Parität).
+Parameter `PauseCountAfterCounterTrendF2E`. Im CT vom 10. bis 13.10.2026 eingeschaltet (CHANGELOG Nr. 2), seit Nr. 7 aus (ersetzt durch EC-13);
+Python-Default false (bisheriges Verhalten); in EntryCount.cs seit 13.10.2026, dort Default false.
 - **Beginn**: Ein F2ES auf einer Bar mit Trend +1 (EC-9, Aufwärtstrend) pausiert die **Short**-Zählung;
   ein F2EL bei Trend −1 (Abwärtstrend) pausiert die **Long**-Zählung. Die Pause beginnt nach dem Reset b
   (R:2L) derselben Bar; das laufende Bein wird verworfen.
@@ -103,7 +103,7 @@ Code-Default false = Verhalten des C#-Codes (Parität).
 - Gilt nur für EntryCount; das von DoubleTrap gehostete EntryCount bleibt beim C#-Verhalten (DT wird später getunt).
 
 ### EC-12 F2E-Beobachtung bis zum Ursprung des 2E (neu, CHANGELOG Nr. 5, 11.10.2026)
-Parameter `F2EWatchUntil2EOrigin`. Im CT **eingeschaltet** (`entrycount_doubletrap.toml`); Code-Default false = C#-Verhalten.
+Parameter `F2EWatchUntil2EOrigin`. Im CT **eingeschaltet** (`entrycount_doubletrap.toml`); Python-Default false; in EntryCount.cs seit 13.10.2026, dort Default true.
 - C#: Reset d (neues Extrem) beendet die F2E-Beobachtung bei **jedem** Bruch des aktuellen Ursprungs. Hat ein
   Key-Level-Reset (a/c) nach dem 2E den Ursprung auf die Kontakt-Bar verlegt, reicht schon das nächste höhere Hoch
   (Long) – der 2E gilt als erfolgreich, obwohl der Pullback-Start nicht erreicht ist.
@@ -112,6 +112,24 @@ Parameter `F2EWatchUntil2EOrigin`. Im CT **eingeschaltet** (`entrycount_doubletr
 - Beispiel 19.03.2025 (ES JUN25, 2000 Tick, Bar-Nr. des Indikators): 2EL Bar 87, Ursprung 5692.50 (Bar 73); Key Level
   Bar 88 → Ursprung 5682.75; Bar 89 Hoch 5687.25 beendete die Beobachtung. Mit EC-12: F2EL an Bar 92 (Tief unter Bar 91,
   Hoch 5690.50 < 5692.50).
+- Gilt nur für EntryCount; das von DoubleTrap gehostete EntryCount bleibt beim C#-Verhalten.
+
+### EC-13 Zählung nur von ihrer EMA-Seite (neu, CHANGELOG Nr. 7, 13.10.2026)
+Parameter `CountOnlyFromEmaSide`. Im CT **eingeschaltet**, ersetzt dort EC-11 (`PauseCountAfterCounterTrendF2E = false`);
+Python-Default false; in EntryCount.cs seit 13.10.2026, dort Default true.
+- Regel des Nutzers (13.10.2026): „Über der EMA beginnt die Short-Zählung nicht bei 0, sie endet nach dem F2ES. Sie
+  beginnt wieder, wenn der Kurs unter die EMA geht. Hat sie unter der EMA begonnen, zählt sie über der EMA weiter bis
+  zum F2ES.“ Long gespiegelt.
+- **Seite der EMA** = Close der Bar gegen die EMA derselben Bar (wie das Ende der Pause bei EC-11).
+- **Laufende Zählung**: unverändert über die EMA hinweg (Beine, Entries, Resets) bis zu ihrem F2E. Ein F2ES mit Close
+  **über** der EMA (F2EL: unter) pausiert die Zählung nach Reset b; ein F2E auf der eigenen Seite pausiert nicht.
+- **Neubeginn bei 0**: Würde die Zählung auf einer Bar mit Close jenseits der EMA bei 0 beginnen (erste Bar, Reset d
+  neues Extrem, Reset a/c), pausiert sie sofort.
+- **Pause und Ende** wie EC-11: eingefroren bis zum ersten Close unter der EMA (Short) bzw. über der EMA (Long), dort
+  Neustart mit Ursprung = diese Bar. CSV-Events `CountPaused` („F2ES with close above the EMA“ bzw. „count would start
+  with close above the EMA“) und `CountResumed`.
+- Unterschied zu EC-11: Auslöser ist die EMA-Seite der Bar, nicht der EMA-Trend (EC-9). Beide gleichzeitig an: EC-11
+  pausiert zusätzlich nach einem F2E gegen den Trend, auch auf der eigenen EMA-Seite.
 - Gilt nur für EntryCount; das von DoubleTrap gehostete EntryCount bleibt beim C#-Verhalten.
 
 ### EC-9 Trend und Swings
@@ -129,8 +147,8 @@ MinBodyPct 45 · MinClosePct 70 · MaxBreakoutWickPct 25 · UseRejectionExceptio
 RejectionMaxWickPct 10 · StopMode SignalAndPrevBar · RiskTemplateTicks 16 · RiskToleranceTicks 2 · MaxPullbackPct 49 ·
 RequireEqualOrHigherLeg **false** (entschieden 10.10.2026; der NT-Chart lief mit true) · ResetOnKeyLevel true (**im CT false**, CHANGELOG Nr. 6) ·
 ResetScope CounterTrendOnly · ResetAfterTwoLegs true · ResetOnNewExtreme true · FailedEntryMode PriorBarBreak ·
-InsideBarAsSignal true · PauseCountAfterCounterTrendF2E **true** im CT (neu, EC-11; Code-Default false) ·
-F2EWatchUntil2EOrigin **true** im CT (neu, EC-12; Code-Default false)
+InsideBarAsSignal true · PauseCountAfterCounterTrendF2E false (neu, EC-11; im CT 10.–13.10.2026 true, dann durch EC-13 ersetzt) ·
+F2EWatchUntil2EOrigin **true** im CT (neu, EC-12; Python-Default false, C# true) · CountOnlyFromEmaSide **true** im CT (neu, EC-13; Python-Default false, C# true)
 
 ### Offene Punkte aus PORT_NOTES (nicht umgesetzt, nur zur Entscheidung)
 #1 Parameter in die CSV · #4 Ursprungs-Vergleich ohne halben Tick · #5 übersprungener Entry als eigenes Event.

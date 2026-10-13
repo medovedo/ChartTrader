@@ -378,6 +378,37 @@ def test_ec11_mirror_long_count_after_f2el_in_downtrend():
     assert [b for b, _, _ in entries(ev, "Long")] == [15, 18]
 
 
+# --------------------------------------------------------------------------- tuning EC-13 (CHANGELOG Nr. 7)
+def test_ec13_running_count_goes_to_f2es_above_the_ema_then_pauses():
+    """EC-13: the short count started at the EMA (first bar) runs above the EMA to its F2ES (bar 19, close above
+    the EMA), then pauses until the first close below the EMA (bar 25) - without the trend condition of EC-11."""
+    ec, ev = run_ec(ec11_rows(), ResetOnKeyLevel=False, CountOnlyFromEmaSide=True)
+    paused, resumed = events(ev, "CountPaused", "Short"), events(ev, "CountResumed", "Short")
+    assert [e["BarNo"] for e in paused] == ["19"] and paused[0]["Reason"].startswith("F2ES with close above the EMA")
+    assert [e["BarNo"] for e in resumed] == ["25"]
+    assert [b for b, _, _ in entries(ev, "Short")] == [15, 18]
+    assert not ec.shortState.Paused
+    _, ev = run_ec(mirror(ec11_rows()), ResetOnKeyLevel=False, CountOnlyFromEmaSide=True)
+    assert [e["BarNo"] for e in events(ev, "CountPaused", "Long")] == ["19"]
+    assert [b for b, _, _ in entries(ev, "Long")] == [15, 18]
+
+
+def test_ec13_no_new_count_beyond_the_ema():
+    """EC-13: a new high (reset d) on a bar closing below the EMA would start the long count from 0 below the EMA:
+    paused until the next close above the EMA, where the count starts again (origin = that bar)."""
+    rows = [(100.0, 100.5, 99.5, 100.0)] * 5 + [(100.0, 101.0, 98.0, 98.5),   # new high, close below the EMA
+                                                 (98.5, 100.5, 98.25, 100.25)]  # close above the EMA
+    _, ev = run_ec(rows, ResetOnKeyLevel=False)
+    assert not events(ev, "CountPaused")
+    ec, ev = run_ec(rows, ResetOnKeyLevel=False, CountOnlyFromEmaSide=True)
+    paused, resumed = events(ev, "CountPaused", "Long"), events(ev, "CountResumed", "Long")
+    assert [e["BarNo"] for e in paused] == ["6"]
+    assert paused[0]["Reason"] == "count would start with close below the EMA: long count paused until a close above the EMA"
+    assert [e["BarNo"] for e in resumed] == ["7"] and not ec.longState.Paused
+    assert ec.longState.OriginPrice == 100.5 and ec.longState.Count == 0
+    assert not events(ev, "CountPaused", "Short")
+
+
 # --------------------------------------------------------------------------- tuning DT-a / DT-b (CHANGELOG Nr. 3, 4)
 def test_dta_signal_bar_must_be_the_correction_low():
     """DT-a: a bar after the correction low (no counter move since) is a signal only with the option off."""

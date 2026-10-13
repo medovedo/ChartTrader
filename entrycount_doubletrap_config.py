@@ -53,9 +53,11 @@ class EntryCountConfig:
     ResetOnNewExtreme: bool = True
     FailedEntryMode: str = "PriorBarBreak"
     InsideBarAsSignal: bool = True
-    # Tuning (not in EntryCount.cs yet, see SPEC/CHANGELOG)
+    # Tuning (in EntryCount.cs since 13.10.2026, see SPEC/CHANGELOG; C# defaults = CT values)
     PauseCountAfterCounterTrendF2E: bool = False    # EC-11: F2ES in an uptrend pauses the short count (mirror long)
     F2EWatchUntil2EOrigin: bool = False             # EC-12: a new extreme ends the F2E watch only beyond the 2E's origin
+    CountOnlyFromEmaSide: bool = False              # EC-13: short counts start only below the EMA, long only above;
+                                                    # beyond the EMA a running count goes on to its F2E, then pauses
     # Display
     ShowLabels: bool = True
     MaxLabeledCount: int = 3
@@ -121,7 +123,7 @@ class DoubleTrapConfig:
     DtMaxBarsAfterF2E: int = 10
     DtAllowF2EBarAsSignal: bool = True
     BlockTooLarge: bool = False
-    # Tuning (not in DoubleTrap.cs yet, see SPEC/CHANGELOG)
+    # Tuning (in DoubleTrap.cs since 13.10.2026, see SPEC/CHANGELOG)
     DtSignalBarIsCorrectionExtreme: bool = False    # DT-a: the signal bar is the low (long) / high (short) of the correction
     DtRequireEntryStopsHit: bool = False            # DT-b: correction extreme reaches the structural stops of 1E and 2E
     # Weak 2E

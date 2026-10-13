@@ -772,6 +772,7 @@ class EntryCount:
         c.OriginBar = self.CurrentBar
         c.HasPrevLeg = False
         c.F2Armed = False
+        self.pause_new_count_beyond_ema(c)    # tuning EC-13
 
     def leg_move(self, c: CountState) -> bool:
         # port of EntryCount.LegMove, line 1069
@@ -940,22 +941,41 @@ class EntryCount:
 
         self.start_pause(c)
 
-    # --- Tuning EC-11 (CHANGELOG_Tuning.md Nr. 1, not in EntryCount.cs yet) ------------------------
+    # --- Tuning EC-11 (CHANGELOG_Tuning.md Nr. 1, in EntryCount.cs since 13.10.2026) ---------------
     def start_pause(self, c: CountState) -> None:
         """After an F2E against the EMA trend (F2ES in an uptrend, F2EL in a downtrend) the count of that
-        direction pauses until a bar closes on the other side of the EMA (end_pause)."""
-        if not self.cfg.PauseCountAfterCounterTrendF2E or c.Paused:
+        direction pauses until a bar closes on the other side of the EMA (end_pause).
+        EC-13: also after an F2E that closes beyond the EMA (F2ES above it, F2EL below it)."""
+        if c.Paused:
             return
-        if self.currentTrend != (-1 if c.IsLong else 1):
-            return
+        lsl = "L" if c.IsLong else "S"
+        if self.cfg.PauseCountAfterCounterTrendF2E and self.currentTrend == (-1 if c.IsLong else 1):
+            self.pause(c, f"F2E{lsl} against the {'downtrend' if c.IsLong else 'uptrend'}")
+        elif self.cfg.CountOnlyFromEmaSide and self.beyond_ema(c):
+            self.pause(c, f"F2E{lsl} with close {'below' if c.IsLong else 'above'} the EMA")
+
+    def pause(self, c: CountState, why: str) -> None:
         c.Paused = True
         c.InLeg = False
         c.F2Armed = False
         if self.diag is not None:
             self.log_event("CountPaused", c.IsLong, 0, self.currentSnap, False,
-                           f"F2E{'L' if c.IsLong else 'S'} against the {'downtrend' if c.IsLong else 'uptrend'}: "
-                           f"{'long' if c.IsLong else 'short'} count paused until a close "
+                           f"{why}: {'long' if c.IsLong else 'short'} count paused until a close "
                            f"{'above' if c.IsLong else 'below'} the EMA")
+
+    # --- Tuning EC-13 (CHANGELOG_Tuning.md Nr. 7, in EntryCount.cs since 13.10.2026) ---------------
+    def beyond_ema(self, c: CountState) -> bool:
+        """Current bar closes on the wrong side of the EMA for this direction (short: above, long: below)."""
+        b0, ema0 = self._bar(0), self.ema(0)
+        return b0.close < ema0 if c.IsLong else b0.close > ema0
+
+    def pause_new_count_beyond_ema(self, c: CountState) -> None:
+        """A count only starts on its side of the EMA: a count that would start from 0 on a bar closing beyond
+        the EMA (first bar, reset d/a/c) pauses until a close back on its side (end_pause). A running count is
+        not affected; it goes on through the EMA to its F2E (start_pause)."""
+        if not self.cfg.CountOnlyFromEmaSide or c.Paused or not self.beyond_ema(c):
+            return
+        self.pause(c, f"count would start with close {'below' if c.IsLong else 'above'} the EMA")
 
     def end_pause(self, c: CountState) -> None:
         """First close beyond the EMA ends the pause: the count restarts like on the first bar (origin = this bar)."""
@@ -1040,6 +1060,8 @@ class EntryCount:
             c.InLeg = False
 
         if not meaningful:
+            if reason != RESET_TWO_LEGS:
+                self.pause_new_count_beyond_ema(c)    # tuning EC-13 (after an F2E: start_pause)
             return
 
         if c.IsLong:
@@ -1060,6 +1082,8 @@ class EntryCount:
             self.log_event("Reset", c.IsLong, count_before, self.currentSnap, False,
                            f"{RESET_REASON_NAMES[reason]}; new origin {net_g(origin_price)} "
                            f"@bar {self.barNumbering.get(origin_bar)}")
+        if reason != RESET_TWO_LEGS:
+            self.pause_new_count_beyond_ema(c)    # tuning EC-13 (after an F2E: start_pause)
 
     @staticmethod
     def reset_short_text(reason: int) -> str:

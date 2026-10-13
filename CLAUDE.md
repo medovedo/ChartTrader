@@ -103,12 +103,17 @@ bewusste Architekturentscheidung – keine eigene Fill-Simulation bauen.
   (1736/1736 identisch); Chart-Lauf (Kontext 06.–08., Replay 09.10.) schreibt mit `ExportCsv` 100 % NT-gleiche CSVs.
   Tuning-Werkzeuge: `SPEC_EntryCount_DoubleTrap.md` (Regeln EC-1…10), `CHANGELOG_Tuning.md`, `pa_stats.py vorher nachher`.
   Ausgangswert fürs Tuning `RequireEqualOrHigherLeg = false` (Nutzer, 10.10.2026). Tuning-Änderungen im Port sind mit
-  „tuning EC-n“ markiert und noch nicht in den .cs-Dateien (Schritt 4): Nr. 1 = EC-11 `PauseCountAfterCounterTrendF2E`
+  „tuning EC-n“ markiert; Nr. 1–7 am 13.10.2026 in `EntryCount.cs`/`DoubleTrap.cs` übertragen (Schritt 4, neue Properties
+  ohne `[NinjaScriptProperty]`, weil DoubleTrap die generierte `EntryCount(...)`-Methode aufruft; C#-Defaults = CT-Werte,
+  DoubleTrap schaltet EC-11/12/13 im gehosteten EntryCount ab), NT-Parität 100 % am 09./12.10.2026 (EntryCount und erstmals
+  DoubleTrap, `pa_csv/ec13_0912`): Nr. 1 = EC-11 `PauseCountAfterCounterTrendF2E`
   (Default aus; nur EntryCount, nicht das von DoubleTrap gehostete). DT wird im CT getunt und danach nach C# übertragen
   (Nutzer 10.10.2026, ohne NT-Parität für DT): Nr. 3 DT-a `DtSignalBarIsCorrectionExtreme`, Nr. 4 DT-b
   `DtRequireEntryStopsHit` (Wade Regel 5, beide Default aus). Nr. 5 EC-12 `F2EWatchUntil2EOrigin` (Reset d beendet die
   F2E-Beobachtung nur jenseits des Ursprungs des 2E; Code aus, CT an). Nr. 6: `ResetOnKeyLevel = false` im CT (Regel des
-  Nutzers „Zählung läuft vom Ursprung jenseits der EMA durch die EMA bis F2E/neues Extrem“ = kein Key-Level-Reset). Bar-Nr. überall je Kalendertag Berlin
+  Nutzers „Zählung läuft vom Ursprung jenseits der EMA durch die EMA bis F2E/neues Extrem“ = kein Key-Level-Reset).
+  Nr. 7 EC-13 `CountOnlyFromEmaSide` (Short-Zählung beginnt nur mit Close unter der EMA, läuft darüber bis zum F2ES, dann
+  Pause bis Close unter der EMA; Long gespiegelt; CT an, ersetzt dort EC-11). Bar-Nr. überall je Kalendertag Berlin
   (Bar-Endzeit, `range_bars._number` wie `DayBarNumbering`), nicht je Session (Nutzer 11.10.2026). Wades Regeln W1–W5 stehen in der SPEC. Chart-Panel rechts: Anzeige-Schalter (nur Filter,
   Indikatoren zeichnen im Chart alles, `PaRunner(draw_all=True)`). Tests: `test_entrycount_doubletrap.py`
   (pytest, C#-Testfälle 1–15). Tuning erst nach 100 % Parität: SPEC → Code → `CHANGELOG_Tuning.md`.
