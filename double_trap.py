@@ -37,7 +37,9 @@ HOSTED_PARAMS = ("EmaPeriod", "KeyLevelToleranceTicks", "SwingStrength", "UseSwi
                  "MinBodyPct", "MinClosePct", "MaxBreakoutWickPct", "UseRejectionException", "RejectionMinClosePct",
                  "RejectionMaxWickPct", "StopMode", "RiskTemplateTicks", "RiskToleranceTicks", "MaxPullbackPct",
                  "RequireEqualOrHigherLeg", "ResetOnKeyLevel", "ResetScope", "ResetAfterTwoLegs", "ResetOnNewExtreme",
-                 "FailedEntryMode", "InsideBarAsSignal")
+                 "FailedEntryMode", "InsideBarAsSignal",
+                 # tuning CHANGELOG Nr. 9: the hosted EntryCount counts like EntryCount (EC-11 .. EC-14)
+                 "PauseCountAfterCounterTrendF2E", "F2EWatchUntil2EOrigin", "CountOnlyFromEmaSide", "ResetOnEqualExtreme")
 
 
 def _f0(x: float) -> str:

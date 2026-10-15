@@ -100,7 +100,7 @@ Python-Default false (bisheriges Verhalten); in EntryCount.cs seit 13.10.2026, d
   dieser Bar) und die Bar wird schon normal gezählt (kann ein Bein starten).
 - CSV: Events `CountPaused` und `CountResumed` (Reason mit Grund bzw. Close/EMA und neuem Ursprung); in der
   Bar-Zeile steht der Zustand „Paused“. Ist der Parameter aus, ändert sich an der CSV nichts.
-- Gilt nur für EntryCount; das von DoubleTrap gehostete EntryCount bleibt beim C#-Verhalten (DT wird später getunt).
+- Das von DoubleTrap gehostete EntryCount zählt seit CHANGELOG Nr. 9 (15.10.2026) gleich (eigene DT-Parameter, gleiche Werte).
 
 ### EC-12 F2E-Beobachtung bis zum Ursprung des 2E (neu, CHANGELOG Nr. 5, 11.10.2026)
 Parameter `F2EWatchUntil2EOrigin`. Im CT **eingeschaltet** (`entrycount_doubletrap.toml`); Python-Default false; in EntryCount.cs seit 13.10.2026, dort Default true.
@@ -112,7 +112,7 @@ Parameter `F2EWatchUntil2EOrigin`. Im CT **eingeschaltet** (`entrycount_doubletr
 - Beispiel 19.03.2025 (ES JUN25, 2000 Tick, Bar-Nr. des Indikators): 2EL Bar 87, Ursprung 5692.50 (Bar 73); Key Level
   Bar 88 → Ursprung 5682.75; Bar 89 Hoch 5687.25 beendete die Beobachtung. Mit EC-12: F2EL an Bar 92 (Tief unter Bar 91,
   Hoch 5690.50 < 5692.50).
-- Gilt nur für EntryCount; das von DoubleTrap gehostete EntryCount bleibt beim C#-Verhalten.
+- Das von DoubleTrap gehostete EntryCount zählt seit CHANGELOG Nr. 9 (15.10.2026) gleich (eigene DT-Parameter, gleiche Werte).
 
 ### EC-13 Zählung nur von ihrer EMA-Seite (neu, CHANGELOG Nr. 7, 13.10.2026)
 Parameter `CountOnlyFromEmaSide`. Im CT **eingeschaltet**, ersetzt dort EC-11 (`PauseCountAfterCounterTrendF2E = false`);
@@ -130,7 +130,7 @@ Python-Default false; in EntryCount.cs seit 13.10.2026, dort Default true.
   with close above the EMA“) und `CountResumed`.
 - Unterschied zu EC-11: Auslöser ist die EMA-Seite der Bar, nicht der EMA-Trend (EC-9). Beide gleichzeitig an: EC-11
   pausiert zusätzlich nach einem F2E gegen den Trend, auch auf der eigenen EMA-Seite.
-- Gilt nur für EntryCount; das von DoubleTrap gehostete EntryCount bleibt beim C#-Verhalten.
+- Das von DoubleTrap gehostete EntryCount zählt seit CHANGELOG Nr. 9 (15.10.2026) gleich (eigene DT-Parameter, gleiche Werte).
 
 ### EC-14 Reset d auch bei gleichem Extrem (neu, CHANGELOG Nr. 8, 15.10.2026)
 Parameter `ResetOnEqualExtreme`. Im CT **eingeschaltet**; Python-Default false; in EntryCount.cs seit 15.10.2026, dort Default true.
@@ -141,7 +141,7 @@ Parameter `ResetOnEqualExtreme`. Im CT **eingeschaltet**; Python-Default false; 
   Grund NewExtreme. Die F2E-Beobachtung endet weiterhin nur bei einem echten Bruch (gleiches Extrem beendet sie nicht).
 - Beispiel 14.10.2026 (ES DEC26, 2000 Tick): Ursprung der Short-Zählung 7822.00 (Bar 112), 1ES an Bar 115, deren Tief
   7822.00 erreicht → Reset; der Entry an Bar 118 (Signal-Bar 117) ist 1ES statt 2ES (damit auch kein F2ES/Pause an Bar 118).
-- Gilt nur für EntryCount; das von DoubleTrap gehostete EntryCount bleibt beim bisherigen Verhalten.
+- Das von DoubleTrap gehostete EntryCount zählt seit CHANGELOG Nr. 9 (15.10.2026) gleich (eigene DT-Parameter, gleiche Werte).
 
 ### EC-9 Trend und Swings
 - Trend: EMA(`EmaPeriod` 21) heute minus vor `EmaSlopeLookback` (5) Bars, in Ticks: ≥ `MinEmaSlopeTicks` (2) → +1,
@@ -171,7 +171,8 @@ ResetOnEqualExtreme **true** im CT (neu, EC-14; Python-Default false, C# true)
 
 **Vorgehen (Nutzer, 10.10.2026):** DT wird im CT getunt und danach nach C# übertragen. Die NT-Parität des DT-Ports
 wurde nicht geprüft (keine NT-CSV); abgesichert durch die Testfälle 10–15. Ausgangsstand = `DoubleTrap.cs`.
-DoubleTrap hostet ein eigenes EntryCount mit den DT-Parametern (EC-11 dort nicht aktiv).
+DoubleTrap hostet ein eigenes EntryCount mit den DT-Parametern. Seit CHANGELOG Nr. 9 (15.10.2026) zählt es wie EntryCount:
+`ResetOnKeyLevel` false und EC-11…EC-14 als DT-Parameter (Gruppe „04. EntryCount (hosted)“, gleiche Werte wie [EntryCount]).
 
 ### Ziel: Regeln nach Thomas Wade
 - **W1 Kontext**: Der Markt spricht insgesamt noch für den Haupttrend.

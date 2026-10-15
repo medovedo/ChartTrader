@@ -98,14 +98,18 @@ RiskTemplateTicks = 16
 RiskToleranceTicks = 2
 MaxPullbackPct = 49.0
 BlockTooLarge = false
-# 04. EntryCount (hosted)
+# 04. EntryCount (hosted): the same counting as [EntryCount] (CHANGELOG Nr. 9, 15.10.2026)
 RequireEqualOrHigherLeg = false
-ResetOnKeyLevel = true
+ResetOnKeyLevel = false                # CHANGELOG Nr. 9 (was true; like [EntryCount], Nr. 6)
 ResetScope = "CounterTrendOnly"
 ResetAfterTwoLegs = true
 ResetOnNewExtreme = true
 FailedEntryMode = "PriorBarBreak"
 InsideBarAsSignal = true
+PauseCountAfterCounterTrendF2E = false # EC-11
+F2EWatchUntil2EOrigin = true           # EC-12
+CountOnlyFromEmaSide = true            # EC-13
+ResetOnEqualExtreme = true             # EC-14
 # 05. Double Trap
 DtEmaToleranceTicks = 2
 DtMaxBarsAfterF2E = 10

@@ -428,6 +428,24 @@ def test_ec14_equal_low_resets_the_short_count():
     assert resets[0]["BarNo"] == "5" and resets[0]["Reason"] == "NewExtreme, new origin 100 @bar 5"
 
 
+# --------------------------------------------------------------------------- tuning CHANGELOG Nr. 9
+def test_doubletrap_hosted_count_equals_entrycount():
+    """Nr. 9: with the same tuning the EntryCount hosted by DoubleTrap counts exactly like EntryCount
+    (EC-13 pause at bar 19 and restart at bar 25 of ec11_rows, EC-14 double bottom)."""
+    tuning = dict(ResetOnKeyLevel=False, F2EWatchUntil2EOrigin=True, CountOnlyFromEmaSide=True, ResetOnEqualExtreme=True)
+    for rows in (ec11_rows(), mirror(ec11_rows()), long_dt_base() + [LONG_SIGNAL_BAR]):
+        ec = EntryCount(EntryCountConfig(**tuning))
+        dt = DoubleTrap(DoubleTrapConfig(**tuning))
+        paused = []
+        for b in bars_of(rows):
+            ec.on_bar_update(b)
+            dt.on_bar_update(b)
+            for a, h in ((ec.longState, dt.ec.longState), (ec.shortState, dt.ec.shortState)):
+                assert (a.Count, a.InLeg, a.OriginPrice, a.Paused, a.F2Armed) == (h.Count, h.InLeg, h.OriginPrice, h.Paused, h.F2Armed)
+            paused.append(ec.shortState.Paused or ec.longState.Paused)
+        assert any(paused) or rows[-1] == LONG_SIGNAL_BAR
+
+
 # --------------------------------------------------------------------------- tuning DT-a / DT-b (CHANGELOG Nr. 3, 4)
 def test_dta_signal_bar_must_be_the_correction_low():
     """DT-a: a bar after the correction low (no counter move since) is a signal only with the option off."""

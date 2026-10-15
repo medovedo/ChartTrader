@@ -120,6 +120,11 @@ class DoubleTrapConfig:
     ResetOnNewExtreme: bool = True
     FailedEntryMode: str = "PriorBarBreak"
     InsideBarAsSignal: bool = True
+    # Tuning of the hosted EntryCount (CHANGELOG Nr. 9: same counting as EntryCount, see EntryCountConfig)
+    PauseCountAfterCounterTrendF2E: bool = False    # EC-11
+    F2EWatchUntil2EOrigin: bool = False             # EC-12
+    CountOnlyFromEmaSide: bool = False              # EC-13
+    ResetOnEqualExtreme: bool = False               # EC-14
     # Double Trap
     DtEmaToleranceTicks: int = 2
     DtMaxBarsAfterF2E: int = 10

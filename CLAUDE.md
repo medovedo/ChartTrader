@@ -106,9 +106,10 @@ bewusste Architekturentscheidung – keine eigene Fill-Simulation bauen.
   Ausgangswert fürs Tuning `RequireEqualOrHigherLeg = false` (Nutzer, 10.10.2026). Tuning-Änderungen im Port sind mit
   „tuning EC-n“ markiert; Nr. 1–7 am 13.10.2026 in `EntryCount.cs`/`DoubleTrap.cs` übertragen (Schritt 4, neue Properties
   ohne `[NinjaScriptProperty]`, weil DoubleTrap die generierte `EntryCount(...)`-Methode aufruft; C#-Defaults = CT-Werte,
-  DoubleTrap schaltet EC-11/12/13 im gehosteten EntryCount ab), NT-Parität 100 % am 09./12.10.2026 (EntryCount und erstmals
+  DoubleTrap reicht seit Nr. 9 seine EC-11…14-Parameter an das gehostete EntryCount durch), NT-Parität 100 % am 09./12.10.2026 (EntryCount und erstmals
   DoubleTrap, `pa_csv/ec13_0912`): Nr. 1 = EC-11 `PauseCountAfterCounterTrendF2E`
-  (Default aus; nur EntryCount, nicht das von DoubleTrap gehostete). DT wird im CT getunt und danach nach C# übertragen
+  (Default aus). Nr. 9: das von DoubleTrap gehostete EntryCount zählt wie EntryCount (DT-Parameter EC-11…14 und
+  `ResetOnKeyLevel = false`, durchgereicht; Nutzer 15.10.2026). DT wird im CT getunt und danach nach C# übertragen
   (Nutzer 10.10.2026, ohne NT-Parität für DT): Nr. 3 DT-a `DtSignalBarIsCorrectionExtreme`, Nr. 4 DT-b
   `DtRequireEntryStopsHit` (Wade Regel 5, beide Default aus). Nr. 5 EC-12 `F2EWatchUntil2EOrigin` (Reset d beendet die
   F2E-Beobachtung nur jenseits des Ursprungs des 2E; Code aus, CT an). Nr. 6: `ResetOnKeyLevel = false` im CT (Regel des
