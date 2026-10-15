@@ -58,6 +58,8 @@ class EntryCountConfig:
     F2EWatchUntil2EOrigin: bool = False             # EC-12: a new extreme ends the F2E watch only beyond the 2E's origin
     CountOnlyFromEmaSide: bool = False              # EC-13: short counts start only below the EMA, long only above;
                                                     # beyond the EMA a running count goes on to its F2E, then pauses
+    ResetOnEqualExtreme: bool = False               # EC-14: reset d also when a bar reaches the origin exactly (equal
+                                                    # high/low = double top/bottom); the F2E watch still needs a break
     # Display
     ShowLabels: bool = True
     MaxLabeledCount: int = 3

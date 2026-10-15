@@ -1001,11 +1001,15 @@ class EntryCount:
             return
         b0, half, cfg = self._bar(0), self.halfTick, self.cfg
         # Reset d) ASSUMPTION: a new extreme beyond the origin moves the origin (the 2E, if any, has succeeded).
-        if cfg.ResetOnNewExtreme and (b0.high > c.OriginPrice + half if c.IsLong else b0.low < c.OriginPrice - half):
+        beyond = b0.high > c.OriginPrice + half if c.IsLong else b0.low < c.OriginPrice - half
+        # tuning EC-14: a bar reaching the origin exactly (double top/bottom) resets the count as well
+        equal = (cfg.ResetOnEqualExtreme and not beyond and c.OriginBar != self.CurrentBar
+                 and abs((b0.high if c.IsLong else b0.low) - c.OriginPrice) < half)
+        if cfg.ResetOnNewExtreme and (beyond or equal):
             # tuning EC-12: the F2E watch only ends beyond the origin of the 2E's count, not beyond an origin
-            # that a key level reset moved after the 2E
-            if not cfg.F2EWatchUntil2EOrigin or (b0.high > c.F2OriginPrice + half if c.IsLong
-                                                  else b0.low < c.F2OriginPrice - half):
+            # that a key level reset moved after the 2E (EC-14: an equal extreme never ends it)
+            if beyond and (not cfg.F2EWatchUntil2EOrigin or (b0.high > c.F2OriginPrice + half if c.IsLong
+                                                             else b0.low < c.F2OriginPrice - half)):
                 c.F2Armed = False
             self.reset_count(c, RESET_NEW_EXTREME, b0.high if c.IsLong else b0.low, self.CurrentBar)
 

@@ -44,7 +44,10 @@ PauseCountAfterCounterTrendF2E = false         # CT on 10.-13.10.2026, replaced 
 F2EWatchUntil2EOrigin = true                   # CT default since 11.10.2026 (C#: off)
 # EC-13 / CHANGELOG Nr. 7. Short counts start only below the EMA (long only above). A short count that started
 # below the EMA runs on above it until its F2ES and then pauses until a close below the EMA (long mirrored).
-CountOnlyFromEmaSide = true                    # CT default since 13.10.2026 (C#: off)
+CountOnlyFromEmaSide = true                    # CT default since 13.10.2026 (C# default: on)
+# EC-14 / CHANGELOG Nr. 8. Reset d also on an equal extreme: a bar reaching the origin exactly (double bottom for the
+# short count, double top for the long count) restarts the count; the F2E watch still needs a real break
+ResetOnEqualExtreme = true                     # CT default since 15.10.2026 (C# default: on)
 # 5. Display
 ShowLabels = true
 MaxLabeledCount = 3

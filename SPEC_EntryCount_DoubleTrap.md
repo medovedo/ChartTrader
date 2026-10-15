@@ -132,6 +132,17 @@ Python-Default false; in EntryCount.cs seit 13.10.2026, dort Default true.
   pausiert zusätzlich nach einem F2E gegen den Trend, auch auf der eigenen EMA-Seite.
 - Gilt nur für EntryCount; das von DoubleTrap gehostete EntryCount bleibt beim C#-Verhalten.
 
+### EC-14 Reset d auch bei gleichem Extrem (neu, CHANGELOG Nr. 8, 15.10.2026)
+Parameter `ResetOnEqualExtreme`. Im CT **eingeschaltet**; Python-Default false; in EntryCount.cs seit 15.10.2026, dort Default true.
+- Regel des Nutzers (15.10.2026): Erreicht eine Bar genau das bisherige tiefste Tief (Ursprung der Short-Zählung,
+  Doppelboden), wird die Zählung zurückgesetzt wie bei einem neuen Tief. Long gespiegelt (gleiches Hoch, Doppeltop).
+- Umsetzung: Reset d (EC-8) auch, wenn Hoch (Long) bzw. Tief (Short) der Bar gleich dem Ursprung ist (± halber Tick),
+  nicht auf der Bar, die den Ursprung gesetzt hat. Neuer Ursprung = diese Bar (gleicher Preis), Event `Reset` mit
+  Grund NewExtreme. Die F2E-Beobachtung endet weiterhin nur bei einem echten Bruch (gleiches Extrem beendet sie nicht).
+- Beispiel 14.10.2026 (ES DEC26, 2000 Tick): Ursprung der Short-Zählung 7822.00 (Bar 112), 1ES an Bar 115, deren Tief
+  7822.00 erreicht → Reset; der Entry an Bar 118 (Signal-Bar 117) ist 1ES statt 2ES (damit auch kein F2ES/Pause an Bar 118).
+- Gilt nur für EntryCount; das von DoubleTrap gehostete EntryCount bleibt beim bisherigen Verhalten.
+
 ### EC-9 Trend und Swings
 - Trend: EMA(`EmaPeriod` 21) heute minus vor `EmaSlopeLookback` (5) Bars, in Ticks: ≥ `MinEmaSlopeTicks` (2) → +1,
   ≤ −2 → −1, sonst 0.
@@ -148,7 +159,8 @@ RejectionMaxWickPct 10 · StopMode SignalAndPrevBar · RiskTemplateTicks 16 · R
 RequireEqualOrHigherLeg **false** (entschieden 10.10.2026; der NT-Chart lief mit true) · ResetOnKeyLevel true (**im CT false**, CHANGELOG Nr. 6) ·
 ResetScope CounterTrendOnly · ResetAfterTwoLegs true · ResetOnNewExtreme true · FailedEntryMode PriorBarBreak ·
 InsideBarAsSignal true · PauseCountAfterCounterTrendF2E false (neu, EC-11; im CT 10.–13.10.2026 true, dann durch EC-13 ersetzt) ·
-F2EWatchUntil2EOrigin **true** im CT (neu, EC-12; Python-Default false, C# true) · CountOnlyFromEmaSide **true** im CT (neu, EC-13; Python-Default false, C# true)
+F2EWatchUntil2EOrigin **true** im CT (neu, EC-12; Python-Default false, C# true) · CountOnlyFromEmaSide **true** im CT (neu, EC-13; Python-Default false, C# true) ·
+ResetOnEqualExtreme **true** im CT (neu, EC-14; Python-Default false, C# true)
 
 ### Offene Punkte aus PORT_NOTES (nicht umgesetzt, nur zur Entscheidung)
 #1 Parameter in die CSV · #4 Ursprungs-Vergleich ohne halben Tick · #5 übersprungener Entry als eigenes Event.

@@ -87,7 +87,8 @@ bewusste Architekturentscheidung – keine eigene Fill-Simulation bauen.
   nicht gefüllt, Cancel All), schreibt `Sniper.on_setup_ended(why, ended, ts)` → `ManualStrategy.setup_ended` je Setup eine Zeile
   `record_no_trade` (Qty 0, `RunnerExitReason` = `NoTrade (<Grund>)`, Surprised = Box-Stand) und leert die Box (in NT gleich). Datei mit altem Kurz-Header bleibt stehen, Log geht dann nach `*_v2.csv`. Test: `test_journal.py`.
 - `entry_count.py`, `double_trap.py` – 1:1-Port der NT8-Indikatoren `EntryCount.cs`/`DoubleTrap.cs`
-  (`Documents\NinjaTrader 8\bin\Custom\Indicators`, kein Git dort). Aufgabe: `Prompt_Port_EntryCount_DoubleTrap_CT.md`.
+  (`Documents\NinjaTrader 8\bin\Custom\Indicators`; lokales Git-Repo seit 13.10.2026, nur diese beiden
+  Dateien per .gitignore-Whitelist, `*.cs -text` = CRLF bleibt, `git -c safe.directory=…` nötig, Remote github.com/medovedo/nt_indicators, Nutzer pusht selbst). Aufgabe: `Prompt_Port_EntryCount_DoubleTrap_CT.md`.
   **Port, keine Verbesserung**: Zweifel am C#-Code nach `PORT_NOTES.md`, nie in den Port; nie den C#-Code für Parität ändern.
   Je C#-Methode eine Funktion (snake_case), C#-Zeilen im Kommentar. Parameter `entrycount_doubletrap.toml` (NT-Namen
   und -Defaults). .NET-Framework-Zahlenformat in `pa_support.py`. CSV = vorhandenes NT-Format (36 Spalten, Nutzer-
@@ -113,7 +114,8 @@ bewusste Architekturentscheidung – keine eigene Fill-Simulation bauen.
   F2E-Beobachtung nur jenseits des Ursprungs des 2E; Code aus, CT an). Nr. 6: `ResetOnKeyLevel = false` im CT (Regel des
   Nutzers „Zählung läuft vom Ursprung jenseits der EMA durch die EMA bis F2E/neues Extrem“ = kein Key-Level-Reset).
   Nr. 7 EC-13 `CountOnlyFromEmaSide` (Short-Zählung beginnt nur mit Close unter der EMA, läuft darüber bis zum F2ES, dann
-  Pause bis Close unter der EMA; Long gespiegelt; CT an, ersetzt dort EC-11). Bar-Nr. überall je Kalendertag Berlin
+  Pause bis Close unter der EMA; Long gespiegelt; CT an, ersetzt dort EC-11). Nr. 8 EC-14 `ResetOnEqualExtreme` (Reset d auch
+  bei gleichem Tief/Hoch = Doppelboden/-top; F2E-Beobachtung nur bei echtem Bruch; CT und C# an, NT-Parität 100 % am 12.–15.10.2026, `pa_csv/oct12_15_ec14`). Bar-Nr. überall je Kalendertag Berlin
   (Bar-Endzeit, `range_bars._number` wie `DayBarNumbering`), nicht je Session (Nutzer 11.10.2026). Wades Regeln W1–W5 stehen in der SPEC. Chart-Panel rechts: Anzeige-Schalter (nur Filter,
   Indikatoren zeichnen im Chart alles, `PaRunner(draw_all=True)`). Tests: `test_entrycount_doubletrap.py`
   (pytest, C#-Testfälle 1–15). Tuning erst nach 100 % Parität: SPEC → Code → `CHANGELOG_Tuning.md`.

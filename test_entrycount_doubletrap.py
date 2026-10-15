@@ -409,6 +409,25 @@ def test_ec13_no_new_count_beyond_the_ema():
     assert not events(ev, "CountPaused", "Short")
 
 
+# --------------------------------------------------------------------------- tuning EC-14 (CHANGELOG Nr. 8)
+def test_ec14_equal_low_resets_the_short_count():
+    """EC-14: bar 5 reaches the origin low 100.00 exactly (double bottom): the short count restarts, so the next
+    entry (bar 7) is a 1ES instead of a 2ES. Like 14.10.2026 bar 115 (low 7822.00 = origin of bar 112)."""
+    rows = [(101.00, 101.50, 100.00, 100.50),     # 1: origin of the short count (low 100.00)
+            (100.50, 102.00, 100.50, 101.75),     # 2: up leg
+            (101.75, 102.00, 101.00, 101.25),     # 3: inside bar = signal bar
+            (101.25, 101.50, 100.25, 100.50),     # 4: 1ES
+            (100.50, 100.75, 100.00, 100.25),     # 5: low = origin 100.00
+            (100.25, 101.50, 100.25, 101.25),     # 6: up leg
+            (101.25, 101.25, 99.75, 100.00)]      # 7: entry
+    _, ev = run_ec(rows, ResetOnKeyLevel=False)
+    assert [(b, n) for b, n, _ in entries(ev, "Short")] == [(4, 1), (7, 2)]
+    _, ev = run_ec(rows, ResetOnKeyLevel=False, ResetOnEqualExtreme=True)
+    assert [(b, n) for b, n, _ in entries(ev, "Short")] == [(4, 1), (7, 1)]
+    resets = events(ev, "Reset", "Short")
+    assert resets[0]["BarNo"] == "5" and resets[0]["Reason"] == "NewExtreme, new origin 100 @bar 5"
+
+
 # --------------------------------------------------------------------------- tuning DT-a / DT-b (CHANGELOG Nr. 3, 4)
 def test_dta_signal_bar_must_be_the_correction_low():
     """DT-a: a bar after the correction low (no counter move since) is a signal only with the option off."""
